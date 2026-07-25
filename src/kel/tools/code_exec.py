@@ -1,5 +1,5 @@
-"""Python code execution tool — the kel equivalent of LangChain's
-`PythonREPLTool`, deliberately built to be honest about what it isn't.
+"""Python code execution tool, deliberately built to be honest about what
+it isn't.
 
 **This is process isolation with a timeout, NOT a security sandbox.**
 Executed code runs in a separate Python subprocess (so it can't corrupt

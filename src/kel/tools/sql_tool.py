@@ -1,4 +1,5 @@
-"""SQL query tool — the kel equivalent of LangChain's `SQLDatabaseToolkit`.
+"""SQL query tool: run read-only queries against any DB-API-compatible
+database from an agent.
 
 Deliberately takes a pre-built DB-API connection (`connection=`) rather
 than a connection string with credentials baked in — kel never touches

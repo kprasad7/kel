@@ -1,7 +1,6 @@
-"""A single agent with a tool + RAG retrieval — the kel equivalent of the
-classic "agent with tools" quickstart you'd see in LangChain, using kel's
-actual subsystems end to end: model gateway, budget, observability,
-retrieval, and the agent tool loop.
+"""A single agent with a tool + RAG retrieval — the classic "agent with
+tools" quickstart, using kel's actual subsystems end to end: model
+gateway, budget, observability, retrieval, and the agent tool loop.
 
 Run:
     export ANTHROPIC_API_KEY=sk-...

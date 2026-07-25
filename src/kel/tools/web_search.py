@@ -1,7 +1,6 @@
-"""Built-in web search tools — the kel equivalent of LangChain's
-`DuckDuckGoSearchRun` / `WikipediaQueryRun` / `TavilySearchResults` /
-`GoogleSearchAPIWrapper` / `BingSearchAPIWrapper`. All return a
-`kel.agents.Tool`, ready to hand straight to `Agent(..., tools=[...])`.
+"""Built-in web search tools spanning DuckDuckGo, Wikipedia, Tavily,
+Google, and Bing. All return a `kel.agents.Tool`, ready to hand straight
+to `Agent(..., tools=[...])`.
 
 No-key options:
 - `wikipedia_search_tool`: zero dependency, uses Wikipedia's official

@@ -89,7 +89,8 @@ def test_file_checkpoint_store_empty_run_returns_empty_and_none():
 class _EvilPayload:
     """Classic pickle-RCE proof-of-concept: __reduce__ tells the unpickler
     to call os.system(...) during load. This is the exact mechanism behind
-    deserialization-of-untrusted-data CVEs like LangChain's CVE-2025-68664."""
+    several disclosed deserialization-of-untrusted-data CVEs in LLM
+    orchestration frameworks that pickle agent state by default."""
 
     def __reduce__(self):
         return (os.system, ("echo pwned > pwned.txt",))

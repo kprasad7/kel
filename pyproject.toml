@@ -11,6 +11,7 @@ license = { file = "LICENSE" }
 requires-python = ">=3.10"
 authors = [{ name = "venkatkk" }]
 keywords = [
+    "agent-orchestration",
     "agentic-os",
     "agents",
     "ai",
@@ -19,7 +20,6 @@ keywords = [
     "artificial-intelligence",
     "cohere",
     "gemini",
-    "langchain-alternative",
     "llm",
     "llm-framework",
     "llm-orchestration",

@@ -1,8 +1,8 @@
-# 🧠 kel — The Open-Source LangChain Alternative for Building AI Agents in Python
+# 🧠 kel — The Open-Source Agentic AI Framework for Python
 
-**kel** is a universal, production-grade **agentic AI framework for Python** — a normalized multi-provider model gateway plus observability, budget control, memory, retrieval (RAG), multi-agent orchestration, self-healing, and testing, built from the ground up to fix the production pain points that **LangChain** and other **LLM orchestration frameworks** leave unsolved: opaque execution, no native cost control, no deterministic testing, and context/loop failures.
+**kel** is a universal, production-grade **agentic AI framework for Python** — a normalized multi-provider model gateway plus observability, budget control, memory, retrieval (RAG), multi-agent orchestration, self-healing, and testing, built from the ground up to fix the production pain points that **LLM orchestration frameworks** commonly leave unsolved: opaque execution, no native cost control, no deterministic testing, and context/loop failures.
 
-If you're evaluating **AI agent frameworks**, **LangChain alternatives**, **LLM agent orchestration libraries**, or a **Python framework for building autonomous AI agents** with real observability and cost governance — this is built for exactly that.
+If you're evaluating **AI agent frameworks**, **production-ready agent orchestration libraries**, or a **Python framework for building autonomous AI agents** with real observability and cost governance — this is built for exactly that.
 
 <p align="center">
   <img alt="build" src="https://img.shields.io/github/actions/workflow/status/kprasad7/kel/ci.yml?branch=develop&label=build&style=for-the-badge&logo=github&color=2ea44f">
@@ -17,13 +17,13 @@ If you're evaluating **AI agent frameworks**, **LangChain alternatives**, **LLM 
 
 ---
 
-## ✨ Why kel instead of LangChain?
+## ✨ Why kel
 
-| 🎯 Problem with LangChain | ✅ How kel solves it |
+| 🎯 Common pain point in LLM orchestration frameworks | ✅ How kel solves it |
 |---|---|
-| 🕳️ No first-class tracing — bolt on LangSmith or nothing | 📊 **Every call traced by default**, self-hostable via Grafana/OTel |
+| 🕳️ No first-class tracing — bolt on a third-party observability product or go without | 📊 **Every call traced by default**, self-hostable via Grafana/OTel |
 | 💸 Hidden token/cost consumption, surprise bills | 💰 **Budget objects threaded through every call** — hard caps, not suggestions |
-| 🧵 Deeply nested abstractions, painful debugging | 🪶 **Flat, composable classes** — no `Agent → AgentExecutor → ZeroShotAgent` hierarchies |
+| 🧵 Deeply nested abstractions, painful debugging | 🪶 **Flat, composable classes** — no multi-layer wrapper hierarchies to step through |
 | 🔁 Agents loop forever, no stuck-loop detection | 🛑 **Built-in stuck-loop + step-budget guardrails** |
 | 🧪 No deterministic testing story | 🎬 **Record/replay testing** — real API calls once, deterministic CI forever |
 | 🤖 Multi-agent state gets lost between agents | 🔗 **Shared context bus** — downstream agents see what upstream agents *decided* |

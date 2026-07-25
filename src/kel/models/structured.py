@@ -1,7 +1,7 @@
-"""Structured output — the kel equivalent of LangChain's
-`.with_structured_output()`. Implemented once, at the function level, on
-top of the tool-calling abstraction every provider adapter already
-normalizes — no provider-specific "JSON mode" wiring needed.
+"""Structured output: get a validated pydantic model back from any
+provider, implemented once at the function level on top of the
+tool-calling abstraction every provider adapter already normalizes — no
+provider-specific "JSON mode" wiring needed.
 
 Mechanism: gives the model exactly one tool (`return_structured_output`,
 schema = your pydantic model's JSON schema) and asks it to call that tool

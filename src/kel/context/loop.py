@@ -1,6 +1,6 @@
 """Bounded agentic loop primitive (DESIGN.md 3.2): explicit exit
 conditions, a step budget, and stuck-loop detection via a repeated-action
-heuristic — the thing LangChain's AgentExecutor notoriously lacks."""
+heuristic, so an agent loop can't run away unbounded."""
 
 from __future__ import annotations
 

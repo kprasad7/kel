@@ -425,9 +425,10 @@ checkpoints = FileCheckpointStore("./data/checkpoints")   # drop-in for run_grap
 `FileCheckpointStore` uses pickle (state can hold arbitrary Python/pydantic
 objects, not just JSON-safe values) but loads through a restricted
 unpickler that only permits kel's own types plus a small builtin allowlist
-— the mitigation for deserialization-of-untrusted-data attacks (the exact
-vulnerability class behind LangChain's CVE-2025-68664 "LangGrinch"). A
-tampered checkpoint file that tries to instantiate an arbitrary class
+— the mitigation for deserialization-of-untrusted-data attacks (the same
+vulnerability class behind several disclosed CVEs in LLM orchestration
+frameworks that pickle agent state by default). A tampered checkpoint
+file that tries to instantiate an arbitrary class
 raises `pickle.UnpicklingError` instead of executing it — see
 `tests/test_storage.py::test_file_checkpoint_store_refuses_malicious_pickle_payload`
 for a proof-of-concept that's actually run in CI.
@@ -490,7 +491,7 @@ final_text = run_dual_path(fast, slow, on_filler=lambda text: tts.speak(text))
 
 ## 16. Built-in tools (`kel.tools`)
 
-The kel equivalent of `langchain_community.tools` — each function returns a
+kel's built-in tool library — each function returns a
 `kel.agents.Tool`, ready to hand straight to `Agent(..., tools=[...])`.
 
 **Web search — pick whichever provider you have a key for:**
@@ -598,9 +599,9 @@ agent = Agent(
 
 ---
 
-## 17. LangChain-parity additions
+## 17. Feature-parity additions
 
-Added to close specific gaps against LangChain's feature set — each is real and tested, not a stub:
+Added to close specific gaps against other LLM orchestration frameworks — each is real and tested, not a stub:
 
 ```python
 # Async — agenerate()/astream() are real for Anthropic/OpenAI/Cohere now

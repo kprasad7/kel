@@ -1,8 +1,7 @@
 """Response cache backends. `InMemoryCache` for process-lifetime caching
 (dev/test loops), `SQLiteCache` for a durable cache that survives process
-restarts — the two tiers LangChain's own cache offers, minus a Redis
-adapter (out of scope: needs a running Redis server, not something kel
-should assume)."""
+restarts. No Redis adapter (out of scope: needs a running Redis server,
+not something kel should assume)."""
 
 from __future__ import annotations
 

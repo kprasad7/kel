@@ -11,9 +11,10 @@ local dev / moderate-length runs and not optimized for very long-running
 graphs — a future version could append-only instead.
 
 Security note: plain `pickle.loads` on untrusted data is a known
-deserialization-of-untrusted-data RCE vector — the exact vulnerability
-class behind LangChain's CVE-2025-68664 ("LangGrinch"). Loading here goes
-through a restricted unpickler (`_RestrictedUnpickler`) that only permits
+deserialization-of-untrusted-data RCE vector — the same vulnerability
+class behind several disclosed CVEs in LLM orchestration frameworks that
+pickle agent state by default. Loading here goes through a restricted
+unpickler (`_RestrictedUnpickler`) that only permits
 kel's own types plus a small builtin allowlist, so a tampered/malicious
 checkpoint file can't smuggle in an arbitrary class to instantiate. This
 does not make loading checkpoints from a truly untrusted source safe in

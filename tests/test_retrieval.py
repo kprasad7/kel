@@ -73,7 +73,7 @@ def test_retriever_hybrid_search_blends_vector_and_keyword_signals():
     retriever = Retriever(store, embedder=NaiveHashEmbedder(dims=64))
 
     retriever.ingest("kel is a universal agentic OS for building agents", id_prefix="doc1")
-    retriever.ingest("LangChain is a popular but flawed agent framework", id_prefix="doc2")
+    retriever.ingest("older orchestration frameworks bolt observability on as an afterthought", id_prefix="doc2")
 
     results = retriever.retrieve_hybrid("agentic OS kel", k=2)
     assert len(results) > 0

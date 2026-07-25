@@ -1,8 +1,8 @@
-"""Document loaders — the kel equivalent of LangChain's `PyPDFLoader` etc.
-v1 ships one format (PDF, the most commonly requested) rather than the
-dozens LangChain has; more loaders follow the same shape (`load_x(path)
--> str`, `load_x_pages(path) -> list[str]`) and can be added the same way
-without touching anything else.
+"""Document loaders: turn a file on disk into text for ingestion. v1
+ships one format (PDF, the most commonly requested) rather than trying to
+cover every format up front; more loaders follow the same shape
+(`load_x(path) -> str`, `load_x_pages(path) -> list[str]`) and can be
+added the same way without touching anything else.
 
 Requires `pypdf` (`pip install kel[pdf]`). `reader=` is injectable for
 testing without a real PDF file/dependency, same DI pattern as the

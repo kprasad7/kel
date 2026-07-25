@@ -1,5 +1,4 @@
-"""Generic URL content fetcher — the kel equivalent of LangChain's
-`WebBaseLoader` / `requests_tool`. Dynamic in the sense that matters: it
+"""Generic URL content fetcher. Dynamic in the sense that matters: it
 extracts readable text from *any* page's HTML structure via a generic
 tag-based parser (skip script/style/nav/header/footer, keep the rest),
 not a regex tied to one specific site's CSS class names the way a

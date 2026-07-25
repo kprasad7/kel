@@ -1,6 +1,6 @@
-"""Few-shot prompting — the kel equivalent of LangChain's
-`FewShotPromptTemplate`. Deliberately just string assembly, no new
-templating engine: `str.format` is enough for this."""
+"""Few-shot prompting: assemble a prompt from labeled input/output
+examples. Deliberately just string assembly, no new templating engine:
+`str.format` is enough for this."""
 
 from __future__ import annotations
 

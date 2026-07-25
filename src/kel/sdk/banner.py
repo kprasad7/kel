@@ -21,7 +21,7 @@ _ART = r"""
  |_|\_\___|_| |_|_|
 """
 
-_TAGLINE = "Universal agentic OS - a langchain alternative"
+_TAGLINE = "Universal agentic OS for building production-grade AI agents"
 
 
 def _supports_color() -> bool:

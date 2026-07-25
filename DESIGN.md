@@ -2,9 +2,9 @@
 
 ## 1. Why
 
-LangChain's core pain points this project targets directly:
+Common pain points across LLM orchestration frameworks that this project targets directly:
 
-- **Opaque execution** — no first-class tracing/metrics; you bolt on LangSmith or nothing.
+- **Opaque execution** — no first-class tracing/metrics; you bolt on a third-party observability product or go without.
 - **Leaky abstractions** — chains/agents wrap so much that debugging means reading library internals.
 - **Context handling is an afterthought** — no native long-context management, summarization, or loop-safe state.
 - **Vector store lock-in friction** — swapping stores means rewriting retriever code.
@@ -18,26 +18,26 @@ LangChain's core pain points this project targets directly:
 
 kel's bet: treat these as **one system's subsystems with clean interfaces**, not a pile of independent integrations.
 
-### 1.1 What "better than LangChain" means concretely
+### 1.1 What "feature-complete, not stripped-down" means concretely
 
-kel must be a **superset**, not a rewrite that drops capability. Everything LangChain offers has to have a kel equivalent, plus the fixes below. Feature-parity checklist:
+kel must be a **superset**, not a rewrite that drops capability. Every capability class found in mainstream LLM orchestration frameworks needs a kel equivalent, plus the fixes below. Feature-parity checklist:
 
-| LangChain concept | kel equivalent |
+| Capability class | kel equivalent |
 |---|---|
-| Chat models / LLMs wrapper | `kel.models` Model Gateway (3.1) |
+| Chat model wrapper | `kel.models` Model Gateway (3.1) |
 | Prompt templates | `.md` prompt specs (3.6) |
 | Output parsers / structured output | Gateway-level structured output (3.1), schema-validated |
-| Chains / LCEL (`|` pipe) | `kel.runtime` typed DAG (3.10) |
-| Agents / AgentExecutor | `kel.agents` (3.11) |
+| Composable pipelines / chains | `kel.runtime` typed DAG (3.10) |
+| Agents / agent executors | `kel.agents` (3.11) |
 | Tools / tool-calling | Gateway-normalized tool schema (3.1) + tool registry (3.11) |
-| `langchain_community.tools` (built-in tool library) | `kel.tools` — pluggable web search (Wikipedia/DuckDuckGo/Tavily/Brave/SerpAPI/Bing/Google, selected dynamically via `get_web_search_tool`) + generic URL content fetching, see USAGE.md §16 |
+| Built-in tool library | `kel.tools` — pluggable web search (Wikipedia/DuckDuckGo/Tavily/Brave/SerpAPI/Bing/Google, selected dynamically via `get_web_search_tool`) + generic URL content fetching, see USAGE.md §16 |
 | Memory classes | `kel.memory` layered memory (3.3) |
 | Document loaders / text splitters | `kel.retrieval` ingestion pipeline (3.4) |
 | VectorStores / Retrievers | `kel.retrieval` adapter interface (3.4) |
 | Callbacks / tracing | `kel.observability` (3.5) — first-class, not opt-in |
-| LangGraph (graph orchestration, cycles, checkpoints) | `kel.runtime` (3.10) — cyclic DAGs with native checkpointing |
-| LangSmith (tracing/eval SaaS) | `kel.observability` + `kel.testing`, self-hostable via Grafana stack |
-| LangServe (deploy chains as API) | `kel.sdk` serving layer (3.13) |
+| Graph orchestration (cycles, checkpoints) | `kel.runtime` (3.10) — cyclic DAGs with native checkpointing |
+| Hosted tracing/eval SaaS | `kel.observability` + `kel.testing`, self-hostable via Grafana stack |
+| Deploy pipelines/agents as an API | `kel.sdk` serving layer (3.13) |
 | Multi-agent (supervisor/swarm patterns) | `kel.agents` (3.11), plus first-class multi-provider routing |
 | Router chains / RunnableBranch | `kel.brain` central planner/router (3.14) — rules + LLM fallback in v1, learned router optional later |
 | Retry/fallback wrappers (`.with_retry`, `.with_fallbacks`) | `kel.heal` self-healing layer (3.15) — diagnosis-driven, not blind retry |
@@ -78,7 +78,7 @@ Findings from current production reports, folded directly into the subsystem des
 
 ### 3.2 Context & Loop Engineering (`kel.context`)
 - `ContextWindow` object: tracks tokens used, applies eviction policy (sliding window, summarization-on-overflow, hierarchical compression).
-- `Loop` primitive: bounded agentic loops with explicit exit conditions, step budget, and stuck-loop detection (repeated tool calls / no-progress heuristics) — the thing LangChain agents notoriously lack.
+- `Loop` primitive: bounded agentic loops with explicit exit conditions, step budget, and stuck-loop detection (repeated tool calls / no-progress heuristics) — a guardrail many agent frameworks notoriously lack.
 - Long-context strategies pluggable: map-reduce, recursive summarization, retrieval-augmented context injection.
 
 ### 3.3 Memory (`kel.memory`)
@@ -326,10 +326,10 @@ When a step in a multi-agent loop fails — tool error, malformed/invalid output
 
 ## 7. Final verdict — what's good, what was bad, what got cut
 
-A 15-subsystem framework that tries to ship everything at once is exactly how "LangChain killers" die — never shipping, or shipping shallow. Being ruthless about scope now is what makes this credible instead of a wishlist.
+A 15-subsystem framework that tries to ship everything at once is exactly how ambitious "framework killer" projects die — never shipping, or shipping shallow. Being ruthless about scope now is what makes this credible instead of a wishlist.
 
 **Genuinely strong, keep as the actual differentiators (this is what wins):**
-- **Observability-by-default (3.5)** — the single biggest real gap in LangChain. Nobody ships a framework where every span is traced from line one. This is the headline feature, not an add-on.
+- **Observability-by-default (3.5)** — the single biggest real gap across mainstream orchestration frameworks. Nobody ships a framework where every span is traced from line one. This is the headline feature, not an add-on.
 - **Budget/token control threaded through every call (3.8)** — real, common production pain; small to build; huge trust payoff.
 - **Context/loop engineering with stuck-loop detection (3.2)** — directly matches the #1 reported 2026 failure mode (context failures, not model failures).
 - **Deterministic record/replay testing (3.7)** — nobody does this well today; if kel nails it, it's a reason to switch on its own.

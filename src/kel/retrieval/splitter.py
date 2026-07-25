@@ -25,12 +25,12 @@ def split_text(text: str, *, chunk_size: int = 500, overlap: int = 50) -> list[s
 def recursive_split_text(
     text: str, *, chunk_size: int = 500, overlap: int = 50, separators: list[str] | None = None
 ) -> list[str]:
-    """LangChain's `RecursiveCharacterTextSplitter` equivalent: tries to
-    split on paragraph breaks first, then lines, then sentences, then
-    words, falling back to a hard character split only when a single
-    "atomic" piece (e.g. one giant paragraph with no punctuation) still
-    doesn't fit. Keeps semantic units intact wherever the text structure
-    allows it, unlike `split_text`'s fixed-window approach."""
+    """Recursive text splitter: tries to split on paragraph breaks first,
+    then lines, then sentences, then words, falling back to a hard
+    character split only when a single "atomic" piece (e.g. one giant
+    paragraph with no punctuation) still doesn't fit. Keeps semantic units
+    intact wherever the text structure allows it, unlike `split_text`'s
+    fixed-window approach."""
     if overlap >= chunk_size:
         raise ValueError("overlap must be smaller than chunk_size")
     if not text:

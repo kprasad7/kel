@@ -1,5 +1,5 @@
-"""LLM-graded evaluation — the kel equivalent of LangChain's criteria/QA
-correctness evaluators. Built directly on `generate_structured` (no new
+"""LLM-graded evaluation: use a judge model to score correctness against
+free-form criteria. Built directly on `generate_structured` (no new
 mechanism): the judge model is asked to return a validated `Grade` object,
 not free text you'd have to parse yourself.
 
