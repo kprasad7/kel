@@ -2,9 +2,9 @@ name: DevSecOps
 
 on:
   push:
-    branches: [master]
+    branches: [develop, main]
   pull_request:
-    branches: [master]
+    branches: [develop, main]
   schedule:
     # weekly, so newly-disclosed CVEs in already-merged dependencies get
     # caught even when nobody pushes new code that week

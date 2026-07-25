@@ -53,9 +53,9 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/kprasad7/kel"
 Repository = "https://github.com/kprasad7/kel"
-Documentation = "https://github.com/kprasad7/kel/blob/master/USAGE.md"
-"Design & Architecture" = "https://github.com/kprasad7/kel/blob/master/DESIGN.md"
-Changelog = "https://github.com/kprasad7/kel/blob/master/CHANGELOG.md"
+Documentation = "https://github.com/kprasad7/kel/blob/develop/USAGE.md"
+"Design & Architecture" = "https://github.com/kprasad7/kel/blob/develop/DESIGN.md"
+Changelog = "https://github.com/kprasad7/kel/blob/develop/CHANGELOG.md"
 "Bug Tracker" = "https://github.com/kprasad7/kel/issues"
 
 [project.optional-dependencies]
