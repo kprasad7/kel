@@ -744,3 +744,5 @@ adapter's constructor signature directly — not just documented, enforced:
 - Rate limiting reserves an *estimated* token cost up front and doesn't refund the difference against actual usage — conservative, not exact.
 - Pinecone has no built-in keyword/full-text search on the base vector index — `PineconeVectorStore.keyword_query` returns an empty list.
 - Nothing here has been exercised against a live API key or a real OTLP/vector-DB/database server except the Cohere path used in the separate `cohere-agent` demo project — everything else (including all 5 vector store adapters, Gemini, Mistral) is tested against fakes/mocks in the test suite.
+
+
