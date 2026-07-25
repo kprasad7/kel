@@ -2,9 +2,14 @@
 `qdrant-client` package (`pip install kel[qdrant]`).
 
 Same caveat as the Cohere adapter, stated plainly: written against
-Qdrant's documented client API (`search`/`upsert`/`retrieve`/`scroll`),
-not exercised against a live Qdrant instance — tested here against an
-injected fake client that mimics that documented shape.
+Qdrant's documented client API (`query_points`/`upsert`/`retrieve`/
+`scroll`), not exercised against a live Qdrant instance — tested here
+against an injected fake client that mimics that documented shape.
+
+Uses `query_points` (returns a `QueryResponse` with a `.points` list),
+not the older `search` method — `search` was removed in qdrant-client
+1.10+, and pinning below that just to keep `search` working is not a
+real fix.
 
 One real constraint worth calling out: **Qdrant point IDs must be an
 unsigned integer or a UUID** — kel's `Chunk.id` is an arbitrary string
@@ -91,8 +96,8 @@ class QdrantVectorStore:
     def query(self, embedding: list[float], k: int = 5) -> list[ScoredChunk]:
         if not self._collection_ready:
             return []
-        hits = self._client.search(collection_name=self.collection_name, query_vector=embedding, limit=k)
-        return [self._to_scored_chunk(hit.payload, hit.score) for hit in hits]
+        response = self._client.query_points(collection_name=self.collection_name, query=embedding, limit=k)
+        return [self._to_scored_chunk(hit.payload, hit.score) for hit in response.points]
 
     def keyword_query(self, query: str, k: int = 5) -> list[ScoredChunk]:
         if not self._collection_ready:

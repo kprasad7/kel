@@ -28,9 +28,10 @@ class FakeQdrantClient:
         for point in points:
             self.points[collection_name][point.id] = {"vector": point.vector, "payload": point.payload}
 
-    def search(self, collection_name, query_vector, limit):
+    def query_points(self, collection_name, query, limit):
         items = list(self.points.get(collection_name, {}).items())[:limit]
-        return [SimpleNamespace(id=pid, payload=data["payload"], score=0.9) for pid, data in items]
+        points = [SimpleNamespace(id=pid, payload=data["payload"], score=0.9) for pid, data in items]
+        return SimpleNamespace(points=points)
 
     def scroll(self, collection_name, scroll_filter, limit):
         query_text = scroll_filter.must[0].match.text.lower()

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `QdrantVectorStore.query()` called `search()`, which qdrant-client removed in favor of `query_points()` — fixed to use `query_points()`, matching the currently supported client API.
+- `Agent` never forwarded `max_tokens`/`temperature` to the model on any of `run`/`arun`/`run_stream`/`arun_stream`, silently locking every agent to each provider adapter's hardcoded default (e.g. 1024 tokens). Added `max_tokens`/`temperature` constructor params on `Agent`, forwarded to every generation call only when explicitly set (so provider defaults are preserved when unset).
+- `Agent` stored a model's response into shared memory unconditionally, even when a turn came back with no text and no tool calls (e.g. truncated by a provider-side error). Since `Agent.memory` persists across every `run()` call, that empty turn corrupted every later question in the session. Added `EmptyModelResponseError` (`kel.agents.errors`), raised before the malformed turn is stored, on `run`/`arun`/`run_stream`/`arun_stream`.
+
 ## [1.0.1] - 2026-07-26
 
 ### Changed

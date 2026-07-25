@@ -2,6 +2,7 @@ import pytest
 
 from helpers import ScriptedModel
 from kel.agents import Agent, Tool
+from kel.agents.errors import EmptyModelResponseError
 from kel.context import Loop, LoopBudgetExceededError, StuckLoopError
 from kel.models.types import ModelResponse, TextPart, ToolUsePart, Usage
 
@@ -66,3 +67,57 @@ def test_agent_raises_loop_budget_exceeded_when_iterations_run_out():
 
     with pytest.raises(LoopBudgetExceededError):
         agent.run("search varying")
+
+
+def test_agent_forwards_max_tokens_and_temperature_to_every_generate_call():
+    model = ScriptedModel("fake-1", [_response([TextPart(text="ok")], "end_turn")])
+    agent = Agent("a", model, max_tokens=256, temperature=0.2)
+
+    agent.run("hi")
+
+    _, kwargs = model.calls[0]
+    assert kwargs["max_tokens"] == 256
+    assert kwargs["temperature"] == 0.2
+
+
+def test_agent_does_not_override_provider_default_when_unset():
+    model = ScriptedModel("fake-1", [_response([TextPart(text="ok")], "end_turn")])
+    agent = Agent("a", model)
+
+    agent.run("hi")
+
+    _, kwargs = model.calls[0]
+    assert "max_tokens" not in kwargs
+    assert "temperature" not in kwargs
+
+
+def test_agent_raises_on_empty_response_and_does_not_store_it_in_memory():
+    model = ScriptedModel("fake-1", [_response([], "end_turn")])
+    agent = Agent("a", model)
+
+    with pytest.raises(EmptyModelResponseError):
+        agent.run("hi")
+
+    # only the user turn should have been recorded — the empty assistant
+    # turn must never make it into memory to poison later questions
+    assert len(agent.memory.working.messages) == 1
+    assert agent.memory.working.messages[0].role == "user"
+
+
+def test_agent_allows_empty_content_when_it_is_a_legitimate_tool_use_turn():
+    # a tool_use turn can legitimately have only ToolUsePart entries and no
+    # text — that's not the degenerate case this guard targets
+    tool_call = ToolUsePart(id="1", name="add", input={"a": 1, "b": 1})
+    model = ScriptedModel(
+        "fake-1",
+        [
+            _response([tool_call], "tool_use", "r1"),
+            _response([TextPart(text="2")], "end_turn", "r2"),
+        ],
+    )
+    tool = Tool(name="add", description="", input_schema={}, fn=lambda i: str(i["a"] + i["b"]))
+    agent = Agent("a", model, tools=[tool])
+
+    response = agent.run("what is 1+1?")
+
+    assert response.text == "2"
