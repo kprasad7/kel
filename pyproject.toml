@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "pykel"
 dynamic = ["version"]
-description = "Universal agentic OS: a normalized model gateway plus observability, budget, context/memory, retrieval, and runtime subsystems for building agents."
+description = "A production-grade agentic AI framework for Python: a unified multi-provider model gateway with built-in observability, cost governance, memory, retrieval (RAG), multi-agent orchestration, and deterministic testing."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
@@ -52,6 +52,7 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/kprasad7/kel"
+GitHub = "https://github.com/kprasad7/kel"
 Repository = "https://github.com/kprasad7/kel"
 Documentation = "https://github.com/kprasad7/kel/blob/develop/USAGE.md"
 "Design & Architecture" = "https://github.com/kprasad7/kel/blob/develop/DESIGN.md"

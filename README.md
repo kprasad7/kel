@@ -1,19 +1,27 @@
 # 🧠 kel — The Open-Source Agentic AI Framework for Python
 
-**kel** is a universal, production-grade **agentic AI framework for Python** — a normalized multi-provider model gateway plus observability, budget control, memory, retrieval (RAG), multi-agent orchestration, self-healing, and testing, built from the ground up to fix the production pain points that **LLM orchestration frameworks** commonly leave unsolved: opaque execution, no native cost control, no deterministic testing, and context/loop failures.
+**kel** is a production-grade **agentic AI framework for Python**: a unified multi-provider model gateway with built-in observability, cost governance, memory, retrieval (RAG), multi-agent orchestration, self-healing, and deterministic testing — engineered to close the gaps that **LLM orchestration frameworks** commonly leave open: opaque execution, no native cost control, no reproducible testing, and context/loop failures.
 
 If you're evaluating **AI agent frameworks**, **production-ready agent orchestration libraries**, or a **Python framework for building autonomous AI agents** with real observability and cost governance — this is built for exactly that.
 
 <p align="center">
   <img alt="build" src="https://img.shields.io/github/actions/workflow/status/kprasad7/kel/ci.yml?branch=develop&label=build&style=for-the-badge&logo=github&color=2ea44f">
   <img alt="security" src="https://img.shields.io/github/actions/workflow/status/kprasad7/kel/security.yml?branch=develop&label=security%20scan&style=for-the-badge&logo=trivy&color=blueviolet">
+  <img alt="pypi" src="https://img.shields.io/pypi/v/pykel.svg?style=for-the-badge&label=pypi&color=3775a9&logo=pypi&logoColor=white">
   <img alt="license" src="https://img.shields.io/badge/license-MIT-yellow.svg?style=for-the-badge">
   <img alt="python" src="https://img.shields.io/badge/python-3.10%2B-blue.svg?style=for-the-badge&logo=python&logoColor=white">
   <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-ff69b4.svg?style=for-the-badge">
 </p>
 
-📖 [**DESIGN.md**](DESIGN.md) — full architecture, scope, and the reasoning behind every tradeoff
-📘 [**USAGE.md**](USAGE.md) — a working guide to every subsystem, with real code examples
+<p align="center">
+  <a href="https://github.com/kprasad7/kel"><strong>💻 GitHub</strong></a> ·
+  <a href="https://pypi.org/project/pykel/"><strong>📦 PyPI</strong></a> ·
+  <a href="https://github.com/kprasad7/kel/blob/develop/DESIGN.md"><strong>📖 Design & Architecture</strong></a> ·
+  <a href="https://github.com/kprasad7/kel/blob/develop/USAGE.md"><strong>📘 Usage Guide</strong></a> ·
+  <a href="https://github.com/kprasad7/kel/issues"><strong>🐛 Issues</strong></a>
+</p>
+
+> 📦 Install with `pip install pykel` — the PyPI distribution is named **pykel** (the `kel` name was already registered), but the import stays `import kel` and the CLI command stays `kel`.
 
 ---
 
@@ -84,16 +92,16 @@ model = get_model("mistral:mistral-large-latest")  # falls back to MISTRAL_API_K
 
 ## 🩺 Status
 
-Every subsystem in [DESIGN.md](DESIGN.md) has a working, tested implementation — model gateway, observability, budget, context/loop, memory, retrieval, specs, runtime graph, multi-agent orchestration, brain, self-healing, testing, storage, SDK/CLI, monitoring dashboard, and realtime orchestration (interfaces only, by design — see DESIGN.md §7). Known gaps are listed honestly at the bottom of [USAGE.md](USAGE.md) — no overclaiming.
+Every subsystem in [DESIGN.md](https://github.com/kprasad7/kel/blob/develop/DESIGN.md) has a working, tested implementation — model gateway, observability, budget, context/loop, memory, retrieval, specs, runtime graph, multi-agent orchestration, brain, self-healing, testing, storage, SDK/CLI, monitoring dashboard, and realtime orchestration (interfaces only, by design — see DESIGN.md §7). Known gaps are listed honestly at the bottom of [USAGE.md](https://github.com/kprasad7/kel/blob/develop/USAGE.md) — no overclaiming.
 
 ## 🛡️ Security
 
-Every push and pull request runs a full DevSecOps pipeline: [Trivy](https://github.com/aquasecurity/trivy) filesystem + secret scanning, `pip-audit` for known CVEs in dependencies, and Bandit static analysis over the codebase. Results surface in the repo's Security tab. See [`.github/workflows/security.yml`](.github/workflows/security.yml).
+Every push and pull request runs a full DevSecOps pipeline: [Trivy](https://github.com/aquasecurity/trivy) filesystem + secret scanning, `pip-audit` for known CVEs in dependencies, and Bandit static analysis over the codebase. Results surface in the repo's Security tab. See [`security.yml`](https://github.com/kprasad7/kel/blob/develop/.github/workflows/security.yml). To report a vulnerability, see [SECURITY.md](https://github.com/kprasad7/kel/blob/develop/SECURITY.md).
 
 ## 🤝 Contributing
 
-Issues and PRs welcome. Adding a new model provider, vector store, or tool follows the same lazy-import adapter pattern throughout the codebase — see any file under `src/kel/models/providers/` for the template.
+Issues and PRs welcome — see [CONTRIBUTING.md](https://github.com/kprasad7/kel/blob/develop/CONTRIBUTING.md). Adding a new model provider, vector store, or tool follows the same lazy-import adapter pattern throughout the codebase — see any file under `src/kel/models/providers/` for the template.
 
 ## 📄 License
 
-[MIT](LICENSE)
+[MIT](https://github.com/kprasad7/kel/blob/develop/LICENSE) © kvenkatprasad
