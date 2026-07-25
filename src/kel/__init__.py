@@ -1,0 +1,47 @@
+from kel.models import (
+    ChatModel,
+    EmbeddingModel,
+    ImagePart,
+    Message,
+    MessageStop,
+    ModelResponse,
+    Role,
+    StructuredOutputError,
+    TextDelta,
+    TextPart,
+    ToolCallDelta,
+    ToolResultPart,
+    ToolSpec,
+    ToolUsePart,
+    Usage,
+    agenerate_structured,
+    generate_structured,
+    get_embedding_model,
+    get_model,
+)
+from kel.observability import get_tracer
+
+__all__ = [
+    "ChatModel",
+    "EmbeddingModel",
+    "ImagePart",
+    "Message",
+    "MessageStop",
+    "ModelResponse",
+    "Role",
+    "StructuredOutputError",
+    "TextDelta",
+    "TextPart",
+    "ToolCallDelta",
+    "ToolResultPart",
+    "ToolSpec",
+    "ToolUsePart",
+    "Usage",
+    "agenerate_structured",
+    "generate_structured",
+    "get_embedding_model",
+    "get_model",
+    "get_tracer",
+]
+
+__version__ = "0.1.0"
