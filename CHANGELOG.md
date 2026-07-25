@@ -7,12 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-26
+
 ### Added
 - PEP 561 `py.typed` marker and dynamic single-sourced versioning.
 - PyPI metadata: classifiers, keywords, `project.urls`.
 - Ruff lint and mypy type-check jobs in CI.
 - ASCII banner shown by the `kel` CLI (`kel --version` / bare `kel`).
 - CHANGELOG, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY docs and GitHub issue/PR templates.
+
+### Changed
+- Published to PyPI as `pykel` (the `kel` name was already taken by an unrelated package); `import kel` and the `kel` CLI command are unaffected.
 
 ## [0.1.0] - 2026-07-24
 
@@ -29,5 +34,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.md`-based agent specs, CLI (`run`/`eval`/`trace`), and `serve()` HTTP runtime.
 - DevSecOps pipeline: Trivy, pip-audit, and Bandit scanning; Dependabot.
 
-[Unreleased]: https://github.com/kprasad7/kel/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/kprasad7/kel/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/kprasad7/kel/releases/tag/v1.0.0
 [0.1.0]: https://github.com/kprasad7/kel/releases/tag/v0.1.0

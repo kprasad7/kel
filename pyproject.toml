@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "kel"
+name = "pykel"
 dynamic = ["version"]
 description = "Universal agentic OS: a normalized model gateway plus observability, budget, context/memory, retrieval, and runtime subsystems for building agents."
 readme = "README.md"
@@ -31,7 +31,7 @@ keywords = [
     "vector-database",
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
@@ -76,7 +76,7 @@ chroma = ["chromadb>=0.5"]
 pgvector = ["psycopg[binary]>=3.1", "pgvector>=0.3"]
 pdf = ["pypdf>=4.0"]
 all = [
-    "kel[anthropic,openai,cohere,gemini,mistral,otel,s3,qdrant,pinecone,weaviate,chroma,pgvector,pdf]",
+    "pykel[anthropic,openai,cohere,gemini,mistral,otel,s3,qdrant,pinecone,weaviate,chroma,pgvector,pdf]",
 ]
 dev = [
     "pytest>=8.0",
