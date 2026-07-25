@@ -63,7 +63,7 @@ anthropic = ["anthropic>=0.40"]
 openai = ["openai>=1.50"]
 cohere = ["cohere>=5.11"]
 gemini = ["google-genai>=0.5"]
-mistral = ["mistralai>=1.0"]
+mistral = ["mistralai>=2.7.2"]
 otel = [
     "opentelemetry-sdk>=1.27",
     "opentelemetry-exporter-otlp-proto-grpc>=1.27",
