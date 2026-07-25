@@ -66,7 +66,14 @@ jobs:
         run: pip install pip-audit
 
       - name: Run pip-audit
-        run: pip-audit
+        # GHSA-f4j7-r4q5-qw2c / PYSEC-2026-311 (chromadb): pre-auth code
+        # injection in a *running Chroma server* via trust_remote_code=true
+        # on the collections endpoint. kel only ships a chromadb client
+        # adapter (kel.retrieval.chroma_store) — it never runs a Chroma
+        # server or sets that flag — so this finding doesn't apply here.
+        # No fixed chromadb version exists yet (affects 1.0.0 through
+        # latest); revisit and drop this ignore once one ships.
+        run: pip-audit --ignore-vuln GHSA-f4j7-r4q5-qw2c
 
   bandit:
     name: Bandit (Python SAST)
