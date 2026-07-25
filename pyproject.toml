@@ -73,7 +73,7 @@ qdrant = ["qdrant-client>=1.10"]
 pinecone = ["pinecone>=5.0"]
 weaviate = ["weaviate-client>=4.6"]
 chroma = ["chromadb>=0.5"]
-pgvector = ["psycopg[binary]>=3.1", "pgvector>=0.3"]
+pgvector = ["psycopg[binary]>=3.3.4", "pgvector>=0.3"]
 pdf = ["pypdf>=4.0"]
 all = [
     "kel[anthropic,openai,cohere,gemini,mistral,otel,s3,qdrant,pinecone,weaviate,chroma,pgvector,pdf]",
