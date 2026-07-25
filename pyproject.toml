@@ -9,7 +9,7 @@ description = "Universal agentic OS: a normalized model gateway plus observabili
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
-authors = [{ name = "venkatkk" }]
+authors = [{ name = "kvenkatprasad" }]
 keywords = [
     "agent-orchestration",
     "agentic-os",
