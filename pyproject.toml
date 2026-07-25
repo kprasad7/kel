@@ -68,7 +68,7 @@ otel = [
     "opentelemetry-sdk>=1.27",
     "opentelemetry-exporter-otlp-proto-grpc>=1.27",
 ]
-s3 = ["boto3>=1.34"]
+s3 = ["boto3>=1.43.56"]
 qdrant = ["qdrant-client>=1.10"]
 pinecone = ["pinecone>=5.0"]
 weaviate = ["weaviate-client>=4.6"]
