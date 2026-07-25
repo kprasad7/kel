@@ -35,8 +35,8 @@ def test_nested_spans_set_parent_id():
     sink = ListSink()
     tracer = Tracer(sinks=[sink])
 
-    with tracer.span("outer") as outer:
-        with tracer.span("inner") as inner:
+    with tracer.span("outer"):
+        with tracer.span("inner"):
             pass
 
     inner_span = next(s for s in sink.spans if s.name == "inner")

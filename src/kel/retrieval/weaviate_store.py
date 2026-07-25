@@ -48,9 +48,16 @@ class WeaviateVectorStore:
             if url is None:
                 # anonymous, self-hosted — the common in-cluster deployment, no key needed
                 self._client = weaviate.connect_to_local()
+            elif api_key:
+                self._client = weaviate.connect_to_weaviate_cloud(
+                    cluster_url=url, auth_credentials=AuthApiKey(api_key)
+                )
             else:
-                auth = AuthApiKey(api_key) if api_key else None
-                self._client = weaviate.connect_to_weaviate_cloud(cluster_url=url, auth_credentials=auth)
+                raise ValueError(
+                    "api_key is required when connecting to Weaviate via a `url` "
+                    "(Weaviate Cloud always requires auth); omit `url` instead for "
+                    "anonymous self-hosted access via connect_to_local()."
+                )
 
     def _ensure_collection(self) -> Any:
         if not self._collection_ready:

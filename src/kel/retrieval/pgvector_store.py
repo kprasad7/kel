@@ -76,7 +76,9 @@ class PgVectorStore:
         embedded = [c for c in chunks if c.embedding is not None]
         if not embedded:
             return
-        self._ensure_table(len(embedded[0].embedding))
+        first_embedding = embedded[0].embedding
+        assert first_embedding is not None
+        self._ensure_table(len(first_embedding))
         with self._conn.cursor() as cur:
             for chunk in embedded:
                 cur.execute(

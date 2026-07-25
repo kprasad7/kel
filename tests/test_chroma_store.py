@@ -7,7 +7,7 @@ class FakeCollection:
         self._data: dict[str, dict] = {}
 
     def upsert(self, ids, embeddings, documents, metadatas):
-        for i, e, d, m in zip(ids, embeddings, documents, metadatas):
+        for i, e, d, m in zip(ids, embeddings, documents, metadatas, strict=True):
             self._data[i] = {"embedding": e, "document": d, "metadata": m}
 
     def query(self, query_embeddings, n_results):

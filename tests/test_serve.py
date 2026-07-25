@@ -1,10 +1,10 @@
 import json
 import urllib.request
 
+from helpers import ScriptedModel
 from kel.agents.agent import Agent
 from kel.models.types import ModelResponse, TextPart, Usage
 from kel.sdk.serve import serve
-from helpers import ScriptedModel
 
 
 def _agent_with_response(text: str) -> Agent:

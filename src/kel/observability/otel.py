@@ -15,7 +15,7 @@ class OTelSink:
             ) from exc
         self._tracer = trace.get_tracer(tracer_name)
 
-    def emit(self, span) -> None:  # type: ignore[no-untyped-def]
+    def emit(self, span) -> None:
         from opentelemetry.trace import Status, StatusCode
 
         start_ns = int(span.start_time * 1_000_000_000)

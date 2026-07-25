@@ -75,7 +75,9 @@ class QdrantVectorStore:
         embedded = [c for c in chunks if c.embedding is not None]
         if not embedded:
             return
-        self._ensure_collection(self.vector_size or len(embedded[0].embedding))
+        first_embedding = embedded[0].embedding
+        assert first_embedding is not None
+        self._ensure_collection(self.vector_size or len(first_embedding))
         points = [
             PointStruct(
                 id=_point_id(chunk.id),

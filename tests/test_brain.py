@@ -85,7 +85,7 @@ def test_brain_raises_when_nothing_can_produce_a_route():
     brain = Brain()
     try:
         brain.route({})
-        assert False, "expected RuntimeError"
+        raise AssertionError("expected RuntimeError")
     except RuntimeError:
         pass
 

@@ -17,7 +17,7 @@ def test_add_within_budget_keeps_all_messages():
 def test_sliding_window_evicts_oldest_first():
     # each message ~ (400 chars // 4) + 4 = 104 tokens; budget of 250 keeps ~2
     window = ContextWindow(max_tokens=250, policy=sliding_window_eviction)
-    for i in range(5):
+    for _i in range(5):
         window.add(_long_message(Message.user, 400))
     assert window.tokens_used <= 250
     assert len(window.messages) < 5
@@ -30,7 +30,7 @@ def test_summarization_eviction_replaces_old_messages_with_summary():
 
     policy = make_summarization_eviction(fake_summarize, keep_recent=2)
     window = ContextWindow(max_tokens=150, policy=policy)
-    for i in range(6):
+    for _i in range(6):
         window.add(_long_message(Message.user, 200))
 
     assert window.tokens_used <= 150 or len(window.messages) <= 3

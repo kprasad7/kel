@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from helpers import ScriptedModel
 from kel.budget import Budget, BudgetTracker
 from kel.models.types import Message, ModelResponse, TextPart, Usage
 from kel.observability.types import Span
@@ -17,7 +18,6 @@ from kel.testing import (
     assert_nodes_visited,
     assert_span_names,
 )
-from helpers import ScriptedModel
 
 
 def _response(text: str, rid: str = "r") -> ModelResponse:

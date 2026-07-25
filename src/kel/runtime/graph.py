@@ -33,7 +33,10 @@ class Graph:
         self.nodes[name] = fn
 
     def add_edge(self, from_node: str, to_node: str) -> None:
-        self._edges[from_node] = lambda _state, _to=to_node: [_to]
+        def _router(_state: dict[str, Any], _to: str = to_node) -> list[str]:
+            return [_to]
+
+        self._edges[from_node] = _router
 
     def add_conditional_edges(self, from_node: str, router: Router) -> None:
         self._edges[from_node] = router

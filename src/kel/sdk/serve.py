@@ -70,7 +70,7 @@ class KelServer:
         if self._thread is not None:
             self._thread.join(timeout=2)
 
-    def __enter__(self) -> "KelServer":
+    def __enter__(self) -> KelServer:
         self.start()
         return self
 

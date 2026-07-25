@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 from kel import Message, ToolSpec
 from kel.models.providers.gemini import GeminiChatModel
-from kel.models.types import MessageStop, TextDelta, ToolCallDelta
+from kel.models.types import MessageStop, TextDelta
 
 
 class FakeModels:

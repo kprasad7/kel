@@ -10,6 +10,7 @@ import sys
 from collections.abc import Callable
 
 from kel.agents.agent import Agent
+from kel.sdk.banner import print_banner
 from kel.sdk.build import build_agent_from_spec
 from kel.specs.eval import load_eval_cases, run_eval_suite
 from kel.testing.cassette import Cassette
@@ -17,9 +18,20 @@ from kel.testing.cassette import Cassette
 AgentBuilder = Callable[..., Agent]
 
 
+class _VersionAction(argparse.Action):
+    def __init__(self, option_strings, dest, **kwargs) -> None:
+        kwargs.setdefault("nargs", 0)
+        super().__init__(option_strings, dest, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None) -> None:
+        print_banner()
+        parser.exit()
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="kel")
-    sub = parser.add_subparsers(dest="command", required=True)
+    parser.add_argument("--version", action=_VersionAction, help="show kel's version and exit")
+    sub = parser.add_subparsers(dest="command")
 
     run_p = sub.add_parser("run", help="Run an agent spec against a single input")
     run_p.add_argument("spec", help="path to an agent .md spec")
@@ -36,7 +48,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None, *, agent_builder: AgentBuilder = build_agent_from_spec) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    if args.command is None:
+        print_banner()
+        parser.print_help()
+        return 0
 
     if args.command == "run":
         agent = agent_builder(args.spec)

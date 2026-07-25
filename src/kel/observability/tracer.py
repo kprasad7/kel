@@ -12,7 +12,7 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Any
+from typing import Any, Literal
 
 from kel.observability.sinks import ConsoleSink, Sink
 from kel.observability.types import Span
@@ -35,7 +35,7 @@ class SpanHandle:
     def set_attribute(self, key: str, value: Any) -> None:
         self.attributes[key] = value
 
-    def _finish(self, status: str, error: str | None) -> Span:
+    def _finish(self, status: Literal["ok", "error"], error: str | None) -> Span:
         duration_ms = (time.perf_counter() - self._start_perf) * 1000
         return Span(
             id=self.id,
@@ -61,7 +61,7 @@ class Tracer:
         parent_id = _current_span_id.get()
         handle = SpanHandle(name, parent_id, dict(attributes))
         token = _current_span_id.set(handle.id)
-        status = "ok"
+        status: Literal["ok", "error"] = "ok"
         error: str | None = None
         try:
             yield handle

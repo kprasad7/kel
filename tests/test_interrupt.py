@@ -1,6 +1,6 @@
 import pytest
 
-from kel.runtime import END, Graph, InMemoryCheckpointStore, Interrupt, resume_graph, run_graph
+from kel.runtime import Graph, InMemoryCheckpointStore, Interrupt, resume_graph, run_graph
 
 
 def test_node_raising_interrupt_pauses_the_run():

@@ -1,8 +1,7 @@
-import pytest
 
+from helpers import ScriptedModel, ScriptedStreamModel
 from kel.agents import Agent, Tool, ToolResultEvent
 from kel.models.types import MessageStop, ModelResponse, TextDelta, TextPart, ToolCallDelta, ToolUsePart, Usage
-from helpers import ScriptedModel, ScriptedStreamModel
 
 
 def _final_text_response(text: str, rid: str) -> ModelResponse:

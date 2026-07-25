@@ -1,7 +1,7 @@
+from helpers import ScriptedModel
 from kel.agents import Agent, run_parallel, run_supervisor, run_swarm, sequential_pipeline
 from kel.models.types import ModelResponse, TextPart, Usage
 from kel.runtime import run_graph
-from helpers import ScriptedModel
 
 
 def _text_response(text: str, rid: str = "r") -> ModelResponse:

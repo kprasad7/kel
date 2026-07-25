@@ -153,6 +153,6 @@ def test_dashboard_unknown_path_returns_404():
     with start_dashboard(metrics, port=0) as dashboard:
         try:
             _get(dashboard.url + "nope")
-            assert False, "expected HTTPError"
+            raise AssertionError("expected HTTPError")
         except urllib.error.HTTPError as exc:
             assert exc.code == 404

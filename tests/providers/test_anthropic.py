@@ -1,8 +1,8 @@
 from types import SimpleNamespace
 
 from kel import Message, TextDelta, ToolCallDelta, ToolSpec
-from kel.models.types import MessageStop
 from kel.models.providers.anthropic import AnthropicChatModel
+from kel.models.types import MessageStop
 
 
 class FakeMessages:

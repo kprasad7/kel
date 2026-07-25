@@ -72,7 +72,9 @@ class PineconeVectorStore:
         embedded = [c for c in chunks if c.embedding is not None]
         if not embedded:
             return
-        index = self._ensure_index(len(embedded[0].embedding))
+        first_embedding = embedded[0].embedding
+        assert first_embedding is not None
+        index = self._ensure_index(len(first_embedding))
         vectors = [
             {"id": c.id, "values": c.embedding, "metadata": {"text": c.text, **c.metadata}} for c in embedded
         ]

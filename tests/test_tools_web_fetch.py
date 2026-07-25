@@ -97,7 +97,7 @@ def test_default_url_fetch_rejects_file_scheme():
 
     try:
         _default_url_fetch("file:///etc/passwd")
-        assert False, "expected ValueError"
+        raise AssertionError("expected ValueError")
     except ValueError as exc:
         assert "unsupported URL scheme" in str(exc)
 
@@ -107,7 +107,7 @@ def test_default_url_fetch_rejects_ftp_scheme():
 
     try:
         _default_url_fetch("ftp://example.com/file")
-        assert False, "expected ValueError"
+        raise AssertionError("expected ValueError")
     except ValueError as exc:
         assert "unsupported URL scheme" in str(exc)
 

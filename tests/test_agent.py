@@ -1,9 +1,9 @@
 import pytest
 
+from helpers import ScriptedModel
 from kel.agents import Agent, Tool
 from kel.context import Loop, LoopBudgetExceededError, StuckLoopError
 from kel.models.types import ModelResponse, TextPart, ToolUsePart, Usage
-from helpers import ScriptedModel
 
 
 def _response(content, stop_reason, rid="r") -> ModelResponse:

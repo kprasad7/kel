@@ -25,5 +25,5 @@ class Cassette(BaseModel):
         Path(path).write_text(self.model_dump_json(indent=2), encoding="utf-8")
 
     @classmethod
-    def load(cls, path: str | Path) -> "Cassette":
+    def load(cls, path: str | Path) -> Cassette:
         return cls.model_validate_json(Path(path).read_text(encoding="utf-8"))

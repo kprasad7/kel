@@ -1,8 +1,8 @@
 from types import SimpleNamespace
 
 from kel import Message, ToolSpec
-from kel.models.types import MessageStop, TextDelta, ToolCallDelta
 from kel.models.providers.cohere import CohereChatModel, CohereEmbeddingModel
+from kel.models.types import MessageStop, TextDelta, ToolCallDelta
 
 
 class FakeClient:

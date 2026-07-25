@@ -25,7 +25,7 @@ def parse_diagnosis(text: str) -> Diagnosis:
         if stripped.upper().startswith("STRATEGY:"):
             candidate = stripped.split(":", 1)[1].strip().lower()
             if candidate in _VALID_STRATEGIES:
-                strategy = candidate  # type: ignore[assignment]
+                strategy = candidate
         elif stripped.upper().startswith("REASON:"):
             reason = stripped.split(":", 1)[1].strip()
     return Diagnosis(strategy=strategy, reason=reason)

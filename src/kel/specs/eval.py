@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from kel.specs.frontmatter import split_frontmatter
 from kel.specs.types import EvalCase
@@ -24,6 +25,9 @@ class EvalResult:
         self.case = case
         self.output = output
         self.passed = passed
+        # populated by kel.specs.llm_eval for criteria-graded cases; plain
+        # substring-assertion cases (run_eval_case above) leave it unset.
+        self.grade: Any = None
 
 
 def run_eval_case(case: EvalCase, respond: Callable[[str], str]) -> EvalResult:

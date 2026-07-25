@@ -71,7 +71,7 @@ class ChromaVectorStore:
         distances = result["distances"][0] if result.get("distances") else [0.0] * len(ids)
         return [
             ScoredChunk(chunk=Chunk(id=i, text=d or "", metadata=m or {}), score=1.0 - dist)
-            for i, d, m, dist in zip(ids, docs, metas, distances)
+            for i, d, m, dist in zip(ids, docs, metas, distances, strict=True)
         ]
 
     def keyword_query(self, query: str, k: int = 5) -> list[ScoredChunk]:
@@ -81,7 +81,7 @@ class ChromaVectorStore:
         metas = result.get("metadatas") or [{}] * len(ids)
         return [
             ScoredChunk(chunk=Chunk(id=i, text=d or "", metadata=m or {}), score=1.0)
-            for i, d, m in zip(ids, docs, metas)
+            for i, d, m in zip(ids, docs, metas, strict=True)
         ]
 
     def get(self, chunk_id: str) -> Chunk | None:

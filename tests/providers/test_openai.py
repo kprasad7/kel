@@ -1,8 +1,8 @@
 from types import SimpleNamespace
 
 from kel import Message, ToolResultPart, ToolSpec, ToolUsePart
-from kel.models.types import MessageStop, Role, TextDelta, ToolCallDelta
 from kel.models.providers.openai import OpenAIChatModel, OpenAIEmbeddingModel
+from kel.models.types import MessageStop, Role, TextDelta, ToolCallDelta
 
 
 class FakeCompletions:

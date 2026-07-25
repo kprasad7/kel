@@ -1,7 +1,7 @@
 import pytest
 
 from kel.brain import EmbeddingRouter
-from kel.heal import Diagnosis, HealExhaustedError, Healer, feed_heal_log_into_router, parse_diagnosis
+from kel.heal import Diagnosis, Healer, HealExhaustedError, feed_heal_log_into_router, parse_diagnosis
 from kel.retrieval import NaiveHashEmbedder
 
 

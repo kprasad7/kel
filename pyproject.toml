@@ -4,16 +4,59 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kel"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Universal agentic OS: a normalized model gateway plus observability, budget, context/memory, retrieval, and runtime subsystems for building agents."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 authors = [{ name = "venkatkk" }]
+keywords = [
+    "agentic-os",
+    "agents",
+    "ai",
+    "ai-agents",
+    "anthropic",
+    "artificial-intelligence",
+    "cohere",
+    "gemini",
+    "langchain-alternative",
+    "llm",
+    "llm-framework",
+    "llm-orchestration",
+    "mistral",
+    "multi-agent",
+    "openai",
+    "python",
+    "rag",
+    "vector-database",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
 dependencies = [
     "pydantic>=2.6",
     "pyyaml>=6.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/kprasad7/kel"
+Repository = "https://github.com/kprasad7/kel"
+Documentation = "https://github.com/kprasad7/kel/blob/main/USAGE.md"
+"Design & Architecture" = "https://github.com/kprasad7/kel/blob/main/DESIGN.md"
+Changelog = "https://github.com/kprasad7/kel/blob/main/CHANGELOG.md"
+"Bug Tracker" = "https://github.com/kprasad7/kel/issues"
 
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.40"]
@@ -40,10 +83,15 @@ dev = [
     "pytest-asyncio>=0.24",
     "qdrant-client>=1.10",
     "weaviate-client>=4.6",
+    "ruff>=0.6",
+    "mypy>=1.11",
 ]
 
 [project.scripts]
 kel = "kel.sdk.cli:run_cli"
+
+[tool.hatch.version]
+path = "src/kel/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/kel"]
@@ -51,3 +99,31 @@ packages = ["src/kel"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 115
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]  # line length handled by formatter/reviewer judgment, not a hard gate
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+warn_unused_ignores = true
+disable_error_code = ["import-untyped"]
+exclude = ["^\\.venv/"]
+# numpy's stubs use PEP 695 syntax that mypy can only parse in 3.12+ mode;
+# kel never imports numpy directly (it's a transitive dep of vector-db
+# extras), so this only affects how mypy parses a stub we don't rely on.
+mypy_path = "$MYPY_CONFIG_FILE_DIR/src"
+
+[[tool.mypy.overrides]]
+# qdrant-client pulls in numpy, whose stubs use PEP 695 syntax mypy can't
+# parse under python_version=3.10; kel only lazy-imports qdrant-client at
+# runtime and never relies on its inferred types, so treat it as untyped.
+module = ["qdrant_client.*", "numpy", "numpy.*"]
+follow_imports = "skip"
+ignore_missing_imports = true

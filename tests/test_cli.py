@@ -1,11 +1,14 @@
 import tempfile
 from pathlib import Path
 
+import pytest
+
+from helpers import ScriptedModel
+from kel import __version__
+from kel.agents.agent import Agent
+from kel.models.types import ModelResponse, TextPart, Usage
 from kel.sdk.cli import main
 from kel.testing.cassette import Cassette, Interaction
-from kel.models.types import ModelResponse, TextPart, Usage
-from helpers import ScriptedModel
-from kel.agents.agent import Agent
 
 
 def _fake_agent_builder_factory(response_text: str):
@@ -17,6 +20,22 @@ def _fake_agent_builder_factory(response_text: str):
         return Agent("cli-agent", model)
 
     return builder
+
+
+def test_bare_invocation_shows_banner_and_help(capsys):
+    exit_code = main([])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "usage: kel" in captured.out
+    assert __version__ in captured.out
+
+
+def test_version_flag_prints_version_and_exits(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--version"])
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 0
+    assert __version__ in captured.out
 
 
 def test_run_command_prints_agent_response(capsys):

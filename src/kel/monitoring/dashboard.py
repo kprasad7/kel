@@ -111,7 +111,7 @@ class MonitoringDashboard:
     @property
     def url(self) -> str:
         host, port = self._httpd.server_address[:2]
-        return f"http://{host}:{port}/"
+        return f"http://{host!s}:{port}/"
 
     def start(self) -> None:
         if self._thread is not None:
@@ -125,7 +125,7 @@ class MonitoringDashboard:
         if self._thread is not None:
             self._thread.join(timeout=2)
 
-    def __enter__(self) -> "MonitoringDashboard":
+    def __enter__(self) -> MonitoringDashboard:
         self.start()
         return self
 

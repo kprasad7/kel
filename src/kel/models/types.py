@@ -7,7 +7,7 @@ nothing above the Model Gateway ever touches a provider-specific SDK shape.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -45,7 +45,7 @@ class ToolResultPart(BaseModel):
 
 
 ContentPart = Annotated[
-    Union[TextPart, ImagePart, ToolUsePart, ToolResultPart],
+    TextPart | ImagePart | ToolUsePart | ToolResultPart,
     Field(discriminator="type"),
 ]
 
@@ -55,11 +55,11 @@ class Message(BaseModel):
     content: list[ContentPart]
 
     @classmethod
-    def user(cls, text: str) -> "Message":
+    def user(cls, text: str) -> Message:
         return cls(role=Role.USER, content=[TextPart(text=text)])
 
     @classmethod
-    def assistant(cls, text: str) -> "Message":
+    def assistant(cls, text: str) -> Message:
         return cls(role=Role.ASSISTANT, content=[TextPart(text=text)])
 
     @property
@@ -121,6 +121,6 @@ class MessageStop(BaseModel):
 
 
 StreamEvent = Annotated[
-    Union[TextDelta, ToolCallDelta, MessageStop],
+    TextDelta | ToolCallDelta | MessageStop,
     Field(discriminator="type"),
 ]

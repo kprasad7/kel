@@ -1,10 +1,10 @@
 import pytest
 from pydantic import BaseModel
 
-from kel import Message, generate_structured, agenerate_structured
+from helpers import ScriptedModel
+from kel import Message, agenerate_structured, generate_structured
 from kel.models.structured import StructuredOutputError
 from kel.models.types import ModelResponse, TextPart, ToolUsePart, Usage
-from helpers import ScriptedModel
 
 
 class Person(BaseModel):

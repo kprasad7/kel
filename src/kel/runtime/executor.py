@@ -94,7 +94,7 @@ def _run(
 ) -> GraphRun:
     with ThreadPoolExecutor(max_workers=8) as pool:
         while current_layer:
-            for node_name in current_layer:
+            for _node_name in current_layer:
                 loop.step()
 
             # run this layer's nodes concurrently against a snapshot of
@@ -136,7 +136,6 @@ def _run(
 
             # de-dupe while preserving order, so the same node requested by
             # two branches in one layer only runs once in the next layer
-            seen: set[str] = set()
-            current_layer = [n for n in next_layer if not (n in seen or seen.add(n))]
+            current_layer = list(dict.fromkeys(next_layer))
 
     return GraphRun(run_id=run_id, state=state, history=history)
