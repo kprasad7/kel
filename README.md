@@ -5,8 +5,8 @@
 If you're evaluating **AI agent frameworks**, **LangChain alternatives**, **LLM agent orchestration libraries**, or a **Python framework for building autonomous AI agents** with real observability and cost governance — this is built for exactly that.
 
 <p align="center">
-  <img alt="build" src="https://img.shields.io/github/actions/workflow/status/kprasad7/kel/ci.yml?branch=main&label=build&style=for-the-badge&logo=github&color=2ea44f">
-  <img alt="security" src="https://img.shields.io/github/actions/workflow/status/kprasad7/kel/security.yml?branch=main&label=security%20scan&style=for-the-badge&logo=trivy&color=blueviolet">
+  <img alt="build" src="https://img.shields.io/github/actions/workflow/status/kprasad7/kel/ci.yml?branch=master&label=build&style=for-the-badge&logo=github&color=2ea44f">
+  <img alt="security" src="https://img.shields.io/github/actions/workflow/status/kprasad7/kel/security.yml?branch=master&label=security%20scan&style=for-the-badge&logo=trivy&color=blueviolet">
   <img alt="license" src="https://img.shields.io/badge/license-MIT-yellow.svg?style=for-the-badge">
   <img alt="python" src="https://img.shields.io/badge/python-3.10%2B-blue.svg?style=for-the-badge&logo=python&logoColor=white">
   <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-ff69b4.svg?style=for-the-badge">
