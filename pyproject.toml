@@ -60,7 +60,7 @@ Changelog = "https://github.com/kprasad7/kel/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.40"]
-openai = ["openai>=1.50"]
+openai = ["openai>=2.48.0"]
 cohere = ["cohere>=5.11"]
 gemini = ["google-genai>=0.5"]
 mistral = ["mistralai>=1.0"]
