@@ -78,6 +78,27 @@ Opt out of tracing/budget wrapping when you want the raw adapter:
 model = get_model("anthropic:claude-sonnet-5", instrument=False)
 ```
 
+**Error hierarchy** — every vendor SDK's own exception is translated
+into one of these before it reaches your code, so error handling doesn't
+need a different `except` clause per provider:
+
+```python
+from kel.models import AuthenticationError, RateLimitError, ProviderError, ModelNotFoundError, KelError
+
+try:
+    response = model.generate([Message.user("hi")])
+except AuthenticationError:
+    ...   # bad/missing API key
+except RateLimitError:
+    ...   # vendor 429 — safe to back off and retry
+except ModelNotFoundError:
+    ...   # get_model("provider:bad-model-id")
+except ProviderError:
+    ...   # any other vendor-side failure, not one of the above
+except KelError:
+    ...   # base class for everything above, if you just want one catch-all
+```
+
 ---
 
 ## 2. Observability (`kel.observability`)
@@ -110,6 +131,18 @@ raw = get_model("anthropic:claude-sonnet-5", instrument=False)
 traced = InstrumentedChatModel(raw)
 ```
 
+Silence tracing entirely (e.g. in a test that doesn't care about spans)
+with `NullSink`, or reach the process-wide `Tracer` directly (`get_tracer`
+is what `add_sink`/`configure` operate on under the hood):
+
+```python
+from kel.observability import NullSink, configure, get_tracer
+
+configure([NullSink()])
+tracer = get_tracer()
+tracer.sinks   # the currently configured list of Sink instances
+```
+
 ---
 
 ## 3. Budget (`kel.budget`)
@@ -130,7 +163,19 @@ from kel.budget import Budget, BudgetTracker
 tracker = BudgetTracker(Budget(max_cost_usd=5.0))
 model_a = get_model("anthropic:claude-sonnet-5", budget=tracker)
 model_b = get_model("openai:gpt-5.2", budget=tracker)   # same pool
-tracker.snapshot()   # tokens_used, cost_usd_used, *_remaining
+snapshot = tracker.snapshot()   # a BudgetSnapshot: tokens_used, cost_usd_used, *_remaining
+```
+
+Checking a model's per-token pricing directly, without making a call —
+`estimate_cost_usd`/`is_priced` are what `Budget` uses internally, from a
+small hardcoded pricing table (unknown models cost $0.0, not a guess):
+
+```python
+from kel.budget import estimate_cost_usd, is_priced
+from kel.models import Usage
+
+is_priced("anthropic", "claude-sonnet-5")   # True — has known per-token pricing
+estimate_cost_usd("anthropic", "claude-sonnet-5", Usage(input_tokens=1000, output_tokens=500))
 ```
 
 ---
@@ -215,6 +260,22 @@ needs for a web UI that recreates the `Agent` object on every request/rerun
 but wants the conversation to persist — construct `Memory` yourself with a
 shared `episodic` store instead of letting `Agent` default to a fresh one.
 
+`SQLiteEpisodicStore` is the same idea as `FileEpisodicStore`, but a
+single SQL-queryable file safe to share across multiple *processes* at
+once (several worker processes behind a web server, all resuming the
+same sessions) — `FileEpisodicStore` is one-JSONL-file-per-session and
+isn't safe for concurrent multi-process writes to the same session:
+
+```python
+from kel.memory import SQLiteEpisodicStore, Memory
+
+episodic = SQLiteEpisodicStore("./sessions.sqlite")
+memory = Memory(session_id="user-42", episodic=episodic)
+memory.remember_turn(Message.user("hi"))
+# any other process opening SQLiteEpisodicStore("./sessions.sqlite") with
+# the same session_id sees this turn immediately
+```
+
 Semantic memory (long-term facts), procedural memory (learned patterns as `.md`):
 
 ```python
@@ -255,7 +316,22 @@ for r in results:
 
 `NaiveHashEmbedder` is zero-dependency and good for local dev only — pass
 any `Callable[[str], list[float]]` (e.g. a real embedding API call) instead
-for production relevance.
+for production relevance. `retrieve`/`retrieve_hybrid` return
+`list[ScoredChunk]` — each a `.score` plus a `.chunk` (`Chunk`: `id`,
+`text`, `metadata`, `embedding`).
+
+Splitting text yourself instead of `retriever.ingest`'s default splitter
+— `split_text` is fixed-size sliding-window chunking (simple, can split
+mid-sentence); `recursive_split_text` (structure-aware: paragraphs, then
+sentences, then words) is preferred for real documents and is what
+`ingest` uses by default:
+
+```python
+from kel.retrieval import split_text, recursive_split_text
+
+chunks = split_text(long_text, chunk_size=500, overlap=50)
+chunks = recursive_split_text(long_text, chunk_size=500, overlap=50)   # prefer this for real documents
+```
 
 **Scoping a search to metadata** — every backend (InMemory, Qdrant,
 Pinecone, Weaviate, Chroma, pgvector) supports `filter`, an exact-match-
@@ -324,7 +400,34 @@ cases:
 from kel.specs import load_eval_cases, run_eval_suite
 
 cases = load_eval_cases("agents/weather.eval.md")
-results = run_eval_suite(cases, respond=lambda text: agent.run(text).text)
+results = run_eval_suite(cases, respond=lambda text: agent.run(text).text)   # list[EvalResult]
+for result in results:
+    result.case, result.output, result.passed   # substring-match pass/fail
+```
+
+Running a single case (what `run_eval_suite` calls in a loop) directly:
+
+```python
+from kel.specs import run_eval_case
+
+result = run_eval_case(cases[0], respond=lambda text: agent.run(text).text)
+```
+
+Grading by criteria instead of substring match — `llm_judge` is the
+one-call primitive `run_llm_graded_eval_suite` (§17) is built on, useful
+directly when you want a `Grade` (`passed`/`score`/`reasoning`) for a
+single input/output pair without a full `EvalCase`:
+
+```python
+from kel.specs import llm_judge
+
+grade = llm_judge(
+    judge_model,
+    input="what's the capital of France?",
+    output=response.text,
+    criteria="the answer correctly names Paris",
+)
+grade.passed, grade.score, grade.reasoning
 ```
 
 ---
@@ -382,7 +485,19 @@ agent = Agent("assistant", model, tools=[delete_tool], approve_tool_call=approve
 A rejected call never runs — the agent sees an error tool result
 ("rejected by approval hook") instead, same as any other tool failure.
 Leaving it unset (the default) approves every call, matching prior
-behavior.
+behavior. `approve_tool_call`'s type is exported as `ApprovalHook`
+(`kel.agents`) if you want to annotate a standalone function with it.
+
+**Concurrent calls on one shared `Agent` instance are safe, but still
+one conversation.** `run`/`arun`/`run_stream`/`arun_stream` each acquire
+a per-instance lock (`threading.Lock` for the sync pair, `asyncio.Lock`
+for the async pair) around the read-model-call-write-memory sequence, so
+two threads/tasks calling into the *same* `Agent` at once can't interleave
+and corrupt `memory.remember_turn()`. That only guarantees no corruption
+— it does not give each caller a private conversation. If you want
+per-user isolation (e.g. serving many users through `kel.sdk`'s adapters),
+construct one `Agent` per session instead of sharing one — see §14's
+per-session factory support.
 
 Multi-agent patterns — each `Agent` can use its own model/API key, or share one:
 
@@ -481,7 +596,21 @@ def critic(response_text: str) -> tuple[bool, str]:
 result = reflect_and_retry(agent, "explain the incident", critic=critic, max_attempts=3)
 result.response.text   # the last attempt, whether or not it was ultimately accepted
 result.accepted        # False if max_attempts was reached without the critic ever accepting
-result.attempts
+result.attempts        # ReflectionResult — list of every (response, feedback) attempt, in order
+```
+
+`areflect_and_retry` is the same loop with an async agent and an async
+critic — useful when the critic itself calls a model (e.g. a
+`HallucinationChecker` or a judge `Agent`):
+
+```python
+from kel.agents import areflect_and_retry
+
+async def async_critic(response_text: str) -> tuple[bool, str]:
+    report = await hallucination_checker.acheck(response_text, sources=chunks)
+    return report.grounded, "; ".join(report.unsupported_claims)
+
+result = await areflect_and_retry(agent, "summarize the report", critic=async_critic, max_attempts=3)
 ```
 
 Each rejected attempt's feedback is fed back to the agent as the next
@@ -591,7 +720,19 @@ Race redundant branches, take whichever finishes with a sufficient answer:
 ```python
 from kel.brain import race_to_finish
 result = race_to_finish({"vector_search": run_vector, "keyword_search": run_keyword})
-result.winner, result.result
+result.winner, result.result   # a RaceResult
+```
+
+Deciding whether another loop iteration is worth running, given what's
+left in a `BudgetTracker` — a fixed-reserve threshold check (not real
+marginal-value estimation, see the module docstring), same call
+signature a smarter version could fill in later:
+
+```python
+from kel.brain import should_continue
+
+while should_continue(tracker.snapshot(), min_tokens_reserve=200, min_cost_reserve=0.01):
+    step()
 ```
 
 ---
@@ -609,6 +750,33 @@ def call_flaky_api(diagnosis):
     return external_api.call()   # may raise
 
 result = healer.run(call_flaky_api, idempotent=True, description="fetch account balance")
+```
+
+Every attempt is recorded on `healer.log` (a `list[HealAttempt]`); if
+healing gives up entirely (max attempts exhausted, or the diagnosis
+escalated to a human), `run` raises `HealExhaustedError`, which always
+carries the full diagnostic trail rather than failing silently:
+
+```python
+from kel.heal import HealExhaustedError
+
+try:
+    result = healer.run(call_flaky_api, idempotent=True, description="fetch account balance")
+except HealExhaustedError as exc:
+    for attempt in exc.attempts:
+        print(attempt.attempt, attempt.error, attempt.diagnosis.strategy, attempt.outcome)
+```
+
+**Learning from past failures**: feed a completed heal log into an
+`EmbeddingRouter` (`kel.brain`) so future routing decisions can route
+around error patterns a similar traffic shape has hit before:
+
+```python
+from kel.heal import feed_heal_log_into_router
+from kel.brain import EmbeddingRouter
+
+router = EmbeddingRouter(embedder=my_embedder)
+feed_heal_log_into_router(healer.log, router)   # each attempt.error -> attempt.diagnosis.strategy
 ```
 
 **The idempotency guardrail is not optional**: pass `idempotent=False` for
@@ -635,13 +803,34 @@ cassette = Cassette.load("tests/cassettes/basic.json")
 replay_model = ReplayChatModel(cassette)
 ```
 
+Calling `replay_model.generate(...)` more times than the cassette has
+recorded interactions raises `ReplayExhaustedError` — a real test failure
+instead of silently reusing a stale response:
+
+```python
+from kel.testing import ReplayExhaustedError
+
+try:
+    replay_model.generate([Message.user("a question the cassette never recorded")])
+except ReplayExhaustedError:
+    ...  # the test made an extra call the recording didn't anticipate
+```
+
 Golden-trace assertions:
 
 ```python
-from kel.testing import assert_node_sequence, assert_no_error_spans, assert_budget_never_exceeded
+from kel.testing import (
+    assert_node_sequence,
+    assert_nodes_visited,
+    assert_no_error_spans,
+    assert_span_names,
+    assert_budget_never_exceeded,
+)
 
-assert_node_sequence(result.history, ["fetch", "fetch", "fetch"])
+assert_node_sequence(result.history, ["fetch", "fetch", "fetch"])   # exact order
+assert_nodes_visited(result.history, {"fetch", "summarize"})        # subset, any order
 assert_no_error_spans(spans.spans)          # spans from a ListSink
+assert_span_names(spans.spans, ["model.generate", "tool.get_weather"])   # exact span-name sequence
 assert_budget_never_exceeded(tracker)
 ```
 
@@ -728,6 +917,43 @@ app = create_fastapi_app(agent)          # a fresh app, ready for `uvicorn app:a
 Uses `Agent.arun()`/`arun_stream()` (the async methods) under the hood,
 so a slow model call doesn't block the whole ASGI event loop.
 
+**Multi-user production serving: one `Agent` per session, not one shared
+`Agent`.** Passing a single `Agent` instance (as above) means every
+caller reads/writes the same conversation history — fine for a demo,
+wrong for real traffic. Pass a zero-arg factory instead, and both the
+FastAPI and WebSocket adapters give each session/connection its own
+isolated `Agent`:
+
+```python
+from kel.agents import Agent
+from kel.sdk import create_fastapi_app
+from kel import get_model
+
+def make_agent() -> Agent:
+    return Agent("assistant", get_model("anthropic:claude-sonnet-5"))
+
+app = create_fastapi_app(make_agent, session_ttl_seconds=3600)
+# POST /invoke {"input": "hi", "session_id": "user-42"}
+#   -> looks up (or lazily builds) a dedicated Agent for "user-42"
+# a different session_id gets a different Agent/conversation;
+# omitting session_id reuses one shared "default" session
+# sessions idle past session_ttl_seconds (default 1h) are evicted
+```
+
+```python
+from kel.sdk import serve_websocket
+
+with serve_websocket(make_agent, port=8000) as server:
+    ...   # each new WebSocket connection builds a fresh Agent from the
+          # factory — a connection is already a natural session boundary,
+          # so there's no session_id to pass
+```
+
+`Agent` already serializes concurrent calls on itself (see the
+concurrency note in §8), so a single shared `Agent` is safe from
+corruption either way — the factory is about isolating *conversations*
+between users, not about thread safety.
+
 CLI:
 
 ```bash
@@ -762,6 +988,23 @@ def slow():
     return agent.run(user_utterance).text   # the real (slower) answer
 
 final_text = run_dual_path(fast, slow, on_filler=lambda text: tts.speak(text))
+```
+
+`STTProvider`/`TTSProvider` are `Protocol`s — any object with a matching
+method satisfies them, no base class to inherit from. `STTResult` is
+what a real `STTProvider.transcribe()` implementation returns:
+
+```python
+from kel.realtime import STTResult, STTProvider, TTSProvider
+
+class MySTT:                                    # satisfies STTProvider structurally
+    def transcribe(self, audio: bytes) -> STTResult:
+        text = my_vendor_sdk.transcribe(audio)
+        return STTResult(text=text, is_final=True)
+
+class MyTTS:                                     # satisfies TTSProvider structurally
+    def synthesize(self, text: str) -> bytes:
+        return my_vendor_sdk.synthesize(text)
 ```
 
 ---
@@ -912,6 +1155,13 @@ from kel.caching import InMemoryCache, SQLiteCache
 from kel.ratelimit import RateLimiter
 model = get_model("openai:gpt-5.2", cache=InMemoryCache(), rate_limit={"requests_per_minute": 60})
 
+# Or share one RateLimiter's token bucket across multiple models directly
+# (RateLimitedChatModel is what get_model(rate_limit=...) wraps internally)
+from kel.ratelimit import RateLimitedChatModel
+shared_limiter = RateLimiter(requests_per_minute=60, tokens_per_minute=100_000)
+model_a = RateLimitedChatModel(get_model("openai:gpt-5.2", instrument=False), shared_limiter)
+model_b = RateLimitedChatModel(get_model("anthropic:claude-sonnet-5", instrument=False), shared_limiter)
+
 # Structured output (with_structured_output equivalent)
 from kel import generate_structured
 from pydantic import BaseModel
@@ -949,7 +1199,11 @@ from kel.tools import python_exec_tool
 tools = [python_exec_tool(timeout=5.0)]
 
 # Prompting techniques: few-shot, chain-of-thought, classic text-based ReAct
-from kel.prompting import format_few_shot_prompt, chain_of_thought_prompt, build_react_system_prompt
+from kel.prompting import format_few_shot_prompt, chain_of_thought_prompt, build_react_system_prompt, extract_final_answer
+
+cot_prompt = chain_of_thought_prompt("what is 17% of 240?")   # appends DEFAULT_COT_SUFFIX asking for step-by-step + "Final Answer:"
+response_text = model.generate([Message.user(cot_prompt)]).text
+answer = extract_final_answer(response_text)   # text after the last "Final Answer:" marker, or the whole text if the model skipped it
 ```
 
 ---
