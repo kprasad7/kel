@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-07-26
+
+### Added
+- `reflect_and_retry()`/`areflect_and_retry()` (`kel.agents`): a ready-made generator/critic reflection loop — a downstream critic's feedback is fed back to the agent as the next turn's input, and it retries up to `max_attempts`. The same "reverse feedback" pattern already expressible as a cyclic `Graph` (`agent_node()` + a conditional edge routing back), packaged as a helper for the common one-generator/one-critic case instead of hand-wiring a `Graph` every time.
+- `max_workers` on `run_graph()`/`resume_graph()`/`fork_from_checkpoint()` (`kel.runtime`): the per-layer concurrency ceiling was hardcoded at 8 regardless of how wide a layer's fan-out actually was — a real throughput cap on large multi-agent flows with many parallel branches. Now configurable (default unchanged at 8); verified with a deterministic barrier-based test that the cap is actually enforced, not just accepted and ignored.
+
 ## [1.4.0] - 2026-07-26
 
 ### Added
@@ -94,7 +100,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.md`-based agent specs, CLI (`run`/`eval`/`trace`), and `serve()` HTTP runtime.
 - DevSecOps pipeline: Trivy, pip-audit, and Bandit scanning; Dependabot.
 
-[Unreleased]: https://github.com/kprasad7/kel/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/kprasad7/kel/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/kprasad7/kel/releases/tag/v1.5.0
 [1.4.0]: https://github.com/kprasad7/kel/releases/tag/v1.4.0
 [1.3.0]: https://github.com/kprasad7/kel/releases/tag/v1.3.0
 [1.2.0]: https://github.com/kprasad7/kel/releases/tag/v1.2.0

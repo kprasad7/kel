@@ -463,6 +463,33 @@ if not report.grounded:
     # retry, ask for citations, escalate to a human, etc.
 ```
 
+**Reverse-feedback / reflection loops.** A downstream critic correcting
+an upstream generator is already expressible as a cyclic `Graph`
+(`agent_node()` + a conditional edge routing back); `reflect_and_retry`
+packages that same pattern as a ready-made helper for the common
+one-generator/one-critic case, so you don't hand-wire a `Graph` for it
+every time:
+
+```python
+from kel.agents import reflect_and_retry
+
+def critic(response_text: str) -> tuple[bool, str]:
+    if len(response_text) < 100:
+        return False, "too brief — add more supporting detail"
+    return True, ""
+
+result = reflect_and_retry(agent, "explain the incident", critic=critic, max_attempts=3)
+result.response.text   # the last attempt, whether or not it was ultimately accepted
+result.accepted        # False if max_attempts was reached without the critic ever accepting
+result.attempts
+```
+
+Each rejected attempt's feedback is fed back to the agent as the next
+turn's input — the critic (downstream) correcting the generator
+(upstream), not just a linear forward pass. `critic` can be anything:
+a plain rule (shown above), a `HallucinationChecker`, or another `Agent`
+acting as a judge.
+
 ---
 
 ## 9. Runtime / Execution Graph (`kel.runtime`)
@@ -487,6 +514,15 @@ Fan-out to multiple nodes in one layer runs them concurrently (real threads, not
 
 ```python
 graph.add_conditional_edges("router", lambda state: ["path_a", "path_b"])
+```
+
+The concurrency ceiling per layer defaults to 8 — raise it for a
+genuinely wide fan-out (dozens of parallel branches in a large
+multi-agent flow); it's I/O-bound work (model/tool calls), so threads
+scale past the CPU core count fine:
+
+```python
+run_graph(graph, {}, max_workers=32)
 ```
 
 **Time travel: rewinding to an arbitrary historical checkpoint.**

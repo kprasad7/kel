@@ -98,6 +98,30 @@ def test_parallel_fan_out_runs_layer_nodes_concurrently():
     assert set(result.history) == {"start", "x", "y"}
 
 
+def test_max_workers_actually_caps_layer_concurrency():
+    # with max_workers=1, two nodes in one layer can never both be "in
+    # flight" at once, so a 2-party barrier between them can never
+    # succeed — proving max_workers is actually threaded through to the
+    # pool, not silently ignored (default is 8; this is the ceiling for
+    # genuinely wide fan-out in a large multi-agent flow).
+    barrier = threading.Barrier(2, timeout=0.5)
+
+    def slow_node(state):
+        barrier.wait()
+        return {}
+
+    graph = Graph(entry="start")
+    graph.add_node("start", lambda state: {})
+    graph.add_node("x", slow_node)
+    graph.add_node("y", slow_node)
+    graph.add_conditional_edges("start", lambda state: ["x", "y"])
+    graph.set_finish("x")
+    graph.set_finish("y")
+
+    with pytest.raises(threading.BrokenBarrierError):
+        run_graph(graph, {}, max_workers=1)
+
+
 def test_fan_out_results_merge_deterministically_by_layer_order():
     graph = Graph(entry="start")
     graph.add_node("start", lambda state: {})

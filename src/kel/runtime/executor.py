@@ -35,7 +35,14 @@ def run_graph(
     tracer: Tracer | None = None,
     checkpoint_store: CheckpointStore | None = None,
     run_id: str | None = None,
+    max_workers: int = 8,
 ) -> GraphRun:
+    """`max_workers` caps how many nodes in one layer run concurrently —
+    the default (8) is fine for typical fan-out, but a genuinely wide
+    layer (dozens of parallel branches in a large agent web) is
+    throttled by it regardless of how much real concurrency the
+    workload could use. Raise it for wider flows; it's I/O-bound work
+    (model/tool calls), so threads scale past the CPU core count fine."""
     graph.validate()
     return _run(
         graph,
@@ -46,6 +53,7 @@ def run_graph(
         loop=loop or Loop(max_iterations=100),
         tracer=tracer or get_tracer(),
         checkpoint_store=checkpoint_store,
+        max_workers=max_workers,
     )
 
 
@@ -57,6 +65,7 @@ def resume_graph(
     loop: Loop | None = None,
     tracer: Tracer | None = None,
     checkpoint_store: CheckpointStore | None = None,
+    max_workers: int = 8,
 ) -> GraphRun:
     """Continue a graph paused by `Interrupt`, injecting `resume_value`
     into state as `state["__resume_value__"]` for the pending node to read.
@@ -78,6 +87,7 @@ def resume_graph(
         loop=loop or Loop(max_iterations=100),
         tracer=tracer or get_tracer(),
         checkpoint_store=checkpoint_store,
+        max_workers=max_workers,
     )
 
 
@@ -91,6 +101,7 @@ def fork_from_checkpoint(
     loop: Loop | None = None,
     tracer: Tracer | None = None,
     checkpoint_store: CheckpointStore | None = None,
+    max_workers: int = 8,
 ) -> GraphRun:
     """Rewind to an arbitrary historical checkpoint and continue execution
     forward from there — a new timeline branching off the old one (a
@@ -125,6 +136,7 @@ def fork_from_checkpoint(
         loop=loop or Loop(max_iterations=100),
         tracer=tracer or get_tracer(),
         checkpoint_store=checkpoint_store,
+        max_workers=max_workers,
     )
 
 
@@ -138,8 +150,9 @@ def _run(
     loop: Loop,
     tracer: Tracer,
     checkpoint_store: CheckpointStore | None,
+    max_workers: int = 8,
 ) -> GraphRun:
-    with ThreadPoolExecutor(max_workers=8) as pool:
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
         while current_layer:
             for _node_name in current_layer:
                 loop.step()

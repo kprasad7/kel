@@ -3,6 +3,7 @@ from kel.agents.errors import EmptyModelResponseError
 from kel.agents.events import ToolResultEvent
 from kel.agents.hallucination import HallucinationChecker, HallucinationReport
 from kel.agents.orchestration import agent_node, run_parallel, run_supervisor, run_swarm, sequential_pipeline
+from kel.agents.reflection import ReflectionResult, areflect_and_retry, reflect_and_retry
 from kel.agents.tool import Tool
 
 __all__ = [
@@ -11,9 +12,12 @@ __all__ = [
     "EmptyModelResponseError",
     "HallucinationChecker",
     "HallucinationReport",
+    "ReflectionResult",
     "Tool",
     "ToolResultEvent",
     "agent_node",
+    "areflect_and_retry",
+    "reflect_and_retry",
     "run_parallel",
     "run_supervisor",
     "run_swarm",
