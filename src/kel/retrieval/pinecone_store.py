@@ -20,7 +20,14 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from kel.retrieval.store import MetadataFilter
 from kel.retrieval.types import Chunk, ScoredChunk
+
+
+def _to_pinecone_filter(filter: MetadataFilter | None) -> dict[str, Any] | None:
+    if not filter:
+        return None
+    return {key: {"$eq": value} for key, value in filter.items()}
 
 
 class PineconeVectorStore:
@@ -80,13 +87,15 @@ class PineconeVectorStore:
         ]
         index.upsert(vectors=vectors)
 
-    def query(self, embedding: list[float], k: int = 5) -> list[ScoredChunk]:
+    def query(self, embedding: list[float], k: int = 5, *, filter: MetadataFilter | None = None) -> list[ScoredChunk]:
         if self._index is None:
             return []
-        result = self._index.query(vector=embedding, top_k=k, include_metadata=True)
+        result = self._index.query(
+            vector=embedding, top_k=k, include_metadata=True, filter=_to_pinecone_filter(filter)
+        )
         return [ScoredChunk(chunk=self._to_chunk(m.id, m.metadata), score=m.score) for m in result.matches]
 
-    def keyword_query(self, query: str, k: int = 5) -> list[ScoredChunk]:
+    def keyword_query(self, query: str, k: int = 5, *, filter: MetadataFilter | None = None) -> list[ScoredChunk]:
         return []
 
     def get(self, chunk_id: str) -> Chunk | None:

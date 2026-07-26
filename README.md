@@ -61,14 +61,17 @@ If you're evaluating **AI agent frameworks**, **production-ready agent orchestra
 ## 📦 Install
 
 ```bash
-pip install -e ".[dev]"        # core + test tooling
-pip install -e ".[anthropic]"  # + Anthropic
-pip install -e ".[openai]"     # + OpenAI
-pip install -e ".[gemini]"     # + Google Gemini
-pip install -e ".[mistral]"    # + Mistral
-pip install -e ".[qdrant]"     # + Qdrant vector store
-pip install -e ".[all]"        # everything
+pip install pykel               # from PyPI — import kel, run `kel`, same as always
+pip install "pykel[anthropic]"  # + Anthropic
+pip install "pykel[openai]"     # + OpenAI
+pip install "pykel[gemini]"     # + Google Gemini
+pip install "pykel[mistral]"    # + Mistral
+pip install "pykel[qdrant]"     # + Qdrant vector store
+pip install "pykel[all]"        # everything
 ```
+
+Working from a clone instead: `pip install -e ".[dev]"` (or `-e ".[all]"`
+for every extra).
 
 ## ⚡ Quickstart
 

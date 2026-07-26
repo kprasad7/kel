@@ -3,6 +3,7 @@ opposed to working memory's budget-constrained active window."""
 
 from __future__ import annotations
 
+import sqlite3
 from collections import defaultdict
 from pathlib import Path
 from typing import Protocol
@@ -51,3 +52,52 @@ class FileEpisodicStore:
             return []
         with path.open(encoding="utf-8") as f:
             return [Message.model_validate_json(line) for line in f if line.strip()]
+
+
+class SQLiteEpisodicStore:
+    """Durable, single-file, SQL-queryable transcript store — the SQLite
+    counterpart to `FileEpisodicStore`'s one-JSONL-file-per-session
+    approach, and the same zero-new-dependency pattern `kel.caching`'s
+    `SQLiteCache` already uses. Durable across process restarts, and,
+    being a single file with SQLite's own locking, usable from multiple
+    *processes* without extra plumbing (e.g. several worker processes
+    behind a web server, all resuming the same sessions) — something
+    `InMemoryEpisodicStore` can never do since it never leaves the
+    process. This is not a claim to Redis/Postgres-grade concurrent-write
+    throughput (SQLite serializes writers), just a durable option that
+    doesn't require running a separate server, closing the specific gap
+    between "in-memory only" and "bring your own backend."
+    """
+
+    def __init__(self, path: str | Path = "kel_episodic.sqlite"):
+        self._conn = sqlite3.connect(str(path), check_same_thread=False)
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS kel_episodic ("
+            "session_id TEXT NOT NULL, seq INTEGER NOT NULL, message TEXT NOT NULL, "
+            "PRIMARY KEY (session_id, seq))"
+        )
+        self._conn.commit()
+
+    def append(self, session_id: str, message: Message) -> None:
+        row = self._conn.execute(
+            "SELECT COALESCE(MAX(seq), -1) + 1 FROM kel_episodic WHERE session_id = ?", (session_id,)
+        ).fetchone()
+        seq = row[0]
+        self._conn.execute(
+            "INSERT INTO kel_episodic (session_id, seq, message) VALUES (?, ?, ?)",
+            (session_id, seq, message.model_dump_json()),
+        )
+        self._conn.commit()
+
+    def transcript(self, session_id: str) -> list[Message]:
+        rows = self._conn.execute(
+            "SELECT message FROM kel_episodic WHERE session_id = ? ORDER BY seq", (session_id,)
+        ).fetchall()
+        return [Message.model_validate_json(row[0]) for row in rows]
+
+    def sessions(self) -> list[str]:
+        rows = self._conn.execute("SELECT DISTINCT session_id FROM kel_episodic").fetchall()
+        return [row[0] for row in rows]
+
+    def close(self) -> None:
+        self._conn.close()

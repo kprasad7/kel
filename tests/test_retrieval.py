@@ -68,6 +68,63 @@ def test_retriever_ingest_and_retrieve_finds_relevant_chunk():
     assert "France" in results[0].chunk.text
 
 
+def test_vector_store_query_scopes_results_to_matching_metadata():
+    store = InMemoryVectorStore()
+    store.upsert([Chunk(id="a", text="doc for user 1", metadata={"user_id": "u1"}, embedding=[1.0, 0.0])])
+    store.upsert([Chunk(id="b", text="doc for user 2", metadata={"user_id": "u2"}, embedding=[1.0, 0.0])])
+
+    results = store.query([1.0, 0.0], k=5, filter={"user_id": "u1"})
+
+    assert [r.chunk.id for r in results] == ["a"]
+
+
+def test_vector_store_keyword_query_scopes_results_to_matching_metadata():
+    store = InMemoryVectorStore()
+    store.upsert([Chunk(id="a", text="agentic OS for user 1", metadata={"user_id": "u1"}, embedding=[1.0, 0.0])])
+    store.upsert([Chunk(id="b", text="agentic OS for user 2", metadata={"user_id": "u2"}, embedding=[1.0, 0.0])])
+
+    results = store.keyword_query("agentic", k=5, filter={"user_id": "u2"})
+
+    assert [r.chunk.id for r in results] == ["b"]
+
+
+def test_vector_store_filter_requires_every_key_to_match():
+    store = InMemoryVectorStore()
+    store.upsert(
+        [Chunk(id="a", text="x", metadata={"user_id": "u1", "source": "amazon"}, embedding=[1.0, 0.0])]
+    )
+    store.upsert(
+        [Chunk(id="b", text="x", metadata={"user_id": "u1", "source": "ebay"}, embedding=[1.0, 0.0])]
+    )
+
+    results = store.query([1.0, 0.0], k=5, filter={"user_id": "u1", "source": "amazon"})
+
+    assert [r.chunk.id for r in results] == ["a"]
+
+
+def test_vector_store_no_filter_returns_everything():
+    store = InMemoryVectorStore()
+    store.upsert([Chunk(id="a", text="x", metadata={"user_id": "u1"}, embedding=[1.0, 0.0])])
+    store.upsert([Chunk(id="b", text="x", metadata={"user_id": "u2"}, embedding=[1.0, 0.0])])
+
+    results = store.query([1.0, 0.0], k=5)
+
+    assert {r.chunk.id for r in results} == {"a", "b"}
+
+
+def test_retriever_retrieve_and_retrieve_hybrid_forward_filter_to_the_store():
+    store = InMemoryVectorStore()
+    retriever = Retriever(store, embedder=NaiveHashEmbedder(dims=64))
+    retriever.ingest("Amazon listing: wireless mouse", id_prefix="amazon", metadata={"source": "amazon"})
+    retriever.ingest("Ebay listing: wireless mouse", id_prefix="ebay", metadata={"source": "ebay"})
+
+    vector_results = retriever.retrieve("wireless mouse", k=5, filter={"source": "amazon"})
+    hybrid_results = retriever.retrieve_hybrid("wireless mouse", k=5, filter={"source": "amazon"})
+
+    assert all(r.chunk.metadata["source"] == "amazon" for r in vector_results)
+    assert all(r.chunk.metadata["source"] == "amazon" for r in hybrid_results)
+
+
 def test_retriever_hybrid_search_blends_vector_and_keyword_signals():
     store = InMemoryVectorStore()
     retriever = Retriever(store, embedder=NaiveHashEmbedder(dims=64))
@@ -163,3 +220,61 @@ def test_retriever_uses_custom_splitter():
     retriever.ingest("some text", chunk_size=123, overlap=7)
 
     assert captured == [(123, 7)]
+
+
+class _FakeReranker:
+    """Records what it was called with and reverses first-stage order —
+    enough to prove Retriever actually delegates to an injected reranker
+    rather than doing its own thing."""
+
+    def __init__(self):
+        self.calls: list[tuple[str, int, int]] = []  # (query, num_candidates, k)
+
+    def rerank(self, query, candidates, k):
+        self.calls.append((query, len(candidates), k))
+        return list(reversed(candidates))[:k]
+
+
+def test_retrieve_delegates_final_ranking_to_an_injected_reranker():
+    store = InMemoryVectorStore()
+    retriever = Retriever(store, embedder=NaiveHashEmbedder(dims=32))
+    for i in range(10):
+        retriever.ingest(f"document number {i}", id_prefix=f"doc{i}")
+
+    reranker = _FakeReranker()
+    retriever.reranker = reranker
+
+    results = retriever.retrieve("some query", k=3)
+
+    assert len(reranker.calls) == 1
+    query, num_candidates, k = reranker.calls[0]
+    assert query == "some query"
+    assert k == 3
+    # overfetches a wider pool than k when a reranker is present
+    assert num_candidates > 3
+    assert len(results) == 3
+
+
+def test_retrieve_without_a_reranker_behaves_exactly_as_before():
+    store = InMemoryVectorStore()
+    store.upsert([Chunk(id="a", text="x", embedding=[1.0, 0.0])])
+    retriever = Retriever(store, embedder=lambda t: [1.0, 0.0])
+
+    results = retriever.retrieve("query", k=5)
+
+    assert [r.chunk.id for r in results] == ["a"]
+
+
+def test_retrieve_hybrid_delegates_final_ranking_to_an_injected_reranker():
+    store = InMemoryVectorStore()
+    retriever = Retriever(store, embedder=NaiveHashEmbedder(dims=32))
+    for i in range(10):
+        retriever.ingest(f"agentic document number {i}", id_prefix=f"doc{i}")
+
+    reranker = _FakeReranker()
+    retriever.reranker = reranker
+
+    results = retriever.retrieve_hybrid("agentic", k=3)
+
+    assert len(reranker.calls) == 1
+    assert len(results) == 3

@@ -1,3 +1,5 @@
+import time
+
 import pytest
 
 from helpers import ScriptedModel
@@ -121,3 +123,149 @@ def test_agent_allows_empty_content_when_it_is_a_legitimate_tool_use_turn():
     response = agent.run("what is 1+1?")
 
     assert response.text == "2"
+
+
+def test_agent_run_executes_multiple_tool_calls_in_one_turn_concurrently():
+    # regression: _execute_tool_call used to run in a plain for loop even
+    # when a model requested several tools in one turn, serializing what
+    # should be independent operations. Assert concurrency via event
+    # ordering (slow tool starts before fast tool finishes), not a tight
+    # wall-clock threshold — timing thresholds are flaky on loaded CI
+    # runners (see test_realtime.py's fix for the same lesson).
+    fast_started_at = None
+    slow_started_at = None
+    fast_finished_at = None
+
+    def fast(_input):
+        nonlocal fast_started_at, fast_finished_at
+        fast_started_at = time.monotonic()
+        time.sleep(0.05)
+        fast_finished_at = time.monotonic()
+        return "fast done"
+
+    def slow(_input):
+        nonlocal slow_started_at
+        slow_started_at = time.monotonic()
+        time.sleep(0.15)
+        return "slow done"
+
+    calls = [
+        ToolUsePart(id="1", name="fast", input={}),
+        ToolUsePart(id="2", name="slow", input={}),
+    ]
+    model = ScriptedModel(
+        "fake-1",
+        [_response(calls, "tool_use", "r1"), _response([TextPart(text="done")], "end_turn", "r2")],
+    )
+    tools = [
+        Tool(name="fast", description="", input_schema={}, fn=fast),
+        Tool(name="slow", description="", input_schema={}, fn=slow),
+    ]
+    agent = Agent("a", model, tools=tools)
+
+    agent.run("do both")
+
+    assert slow_started_at is not None and fast_started_at is not None and fast_finished_at is not None
+    # if run sequentially, slow wouldn't start until fast (0.05s) finished;
+    # concurrent execution means slow starts essentially immediately,
+    # before fast's sleep(0.05) has had time to complete
+    assert slow_started_at < fast_finished_at
+
+
+async def test_agent_arun_executes_multiple_tool_calls_in_one_turn_concurrently():
+    fast_started_at = None
+    slow_started_at = None
+    fast_finished_at = None
+
+    def fast(_input):
+        nonlocal fast_started_at, fast_finished_at
+        fast_started_at = time.monotonic()
+        time.sleep(0.05)
+        fast_finished_at = time.monotonic()
+        return "fast done"
+
+    def slow(_input):
+        nonlocal slow_started_at
+        slow_started_at = time.monotonic()
+        time.sleep(0.15)
+        return "slow done"
+
+    calls = [
+        ToolUsePart(id="1", name="fast", input={}),
+        ToolUsePart(id="2", name="slow", input={}),
+    ]
+    model = ScriptedModel(
+        "fake-1",
+        [_response(calls, "tool_use", "r1"), _response([TextPart(text="done")], "end_turn", "r2")],
+    )
+    tools = [
+        Tool(name="fast", description="", input_schema={}, fn=fast),
+        Tool(name="slow", description="", input_schema={}, fn=slow),
+    ]
+    agent = Agent("a", model, tools=tools)
+
+    await agent.arun("do both")
+
+    assert slow_started_at is not None and fast_started_at is not None and fast_finished_at is not None
+    assert slow_started_at < fast_finished_at
+
+
+def test_agent_rejects_tool_call_when_approval_hook_returns_false():
+    tool_call = ToolUsePart(id="1", name="delete_file", input={"path": "/etc/passwd"})
+    model = ScriptedModel(
+        "fake-1",
+        [_response([tool_call], "tool_use", "r1"), _response([TextPart(text="ok")], "end_turn", "r2")],
+    )
+    tool_called = False
+
+    def delete_file(_input):
+        nonlocal tool_called
+        tool_called = True
+        return "deleted"
+
+    tool = Tool(name="delete_file", description="", input_schema={}, fn=delete_file)
+    agent = Agent("a", model, tools=[tool], approve_tool_call=lambda name, input: False)
+
+    agent.run("delete a file")
+
+    assert tool_called is False
+    tool_result = agent.memory.working.messages[2].content[0]
+    assert tool_result.is_error is True
+    assert "rejected by approval hook" in tool_result.content
+
+
+def test_agent_runs_tool_call_when_approval_hook_returns_true():
+    tool_call = ToolUsePart(id="1", name="add", input={"a": 1, "b": 2})
+    model = ScriptedModel(
+        "fake-1",
+        [_response([tool_call], "tool_use", "r1"), _response([TextPart(text="3")], "end_turn", "r2")],
+    )
+    tool = Tool(name="add", description="", input_schema={}, fn=lambda i: str(i["a"] + i["b"]))
+    approvals: list[tuple[str, dict]] = []
+
+    def approve(name, input):
+        approvals.append((name, input))
+        return True
+
+    agent = Agent("a", model, tools=[tool], approve_tool_call=approve)
+
+    response = agent.run("what is 1+2?")
+
+    assert response.text == "3"
+    assert approvals == [("add", {"a": 1, "b": 2})]
+
+
+def test_agent_with_no_approval_hook_runs_every_tool_call_as_before():
+    tool_call = ToolUsePart(id="1", name="add", input={"a": 1, "b": 1})
+    model = ScriptedModel(
+        "fake-1",
+        [_response([tool_call], "tool_use", "r1"), _response([TextPart(text="2")], "end_turn", "r2")],
+    )
+    tool = Tool(name="add", description="", input_schema={}, fn=lambda i: str(i["a"] + i["b"]))
+    agent = Agent("a", model, tools=[tool])
+
+    response = agent.run("what is 1+1?")
+
+    assert response.text == "2"
+
+

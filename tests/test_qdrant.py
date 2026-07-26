@@ -28,17 +28,31 @@ class FakeQdrantClient:
         for point in points:
             self.points[collection_name][point.id] = {"vector": point.vector, "payload": point.payload}
 
-    def query_points(self, collection_name, query, limit):
-        items = list(self.points.get(collection_name, {}).items())[:limit]
+    @staticmethod
+    def _matches_field_conditions(payload, conditions):
+        for condition in conditions:
+            if payload.get(condition.key) != condition.match.value:
+                return False
+        return True
+
+    def query_points(self, collection_name, query, limit, query_filter=None):
+        field_conditions = query_filter.must if query_filter else []
+        items = [
+            (pid, data)
+            for pid, data in self.points.get(collection_name, {}).items()
+            if self._matches_field_conditions(data["payload"], field_conditions)
+        ][:limit]
         points = [SimpleNamespace(id=pid, payload=data["payload"], score=0.9) for pid, data in items]
         return SimpleNamespace(points=points)
 
     def scroll(self, collection_name, scroll_filter, limit):
         query_text = scroll_filter.must[0].match.text.lower()
+        field_conditions = scroll_filter.must[1:]
         matches = [
             SimpleNamespace(id=pid, payload=data["payload"])
             for pid, data in self.points.get(collection_name, {}).items()
             if query_text in data["payload"].get("text", "").lower()
+            and self._matches_field_conditions(data["payload"], field_conditions)
         ]
         return matches[:limit], None
 
@@ -127,3 +141,33 @@ def test_keyword_query_matches_via_text_filter():
 
     assert len(results) == 1
     assert results[0].chunk.id == "doc1"
+
+
+def test_query_scopes_results_to_matching_metadata():
+    client = FakeQdrantClient()
+    store = QdrantVectorStore("test-collection", client=client)
+    store.upsert(
+        [
+            Chunk(id="doc1", text="a", metadata={"user_id": "u1"}, embedding=[1.0, 0.0]),
+            Chunk(id="doc2", text="b", metadata={"user_id": "u2"}, embedding=[1.0, 0.0]),
+        ]
+    )
+
+    results = store.query([1.0, 0.0], k=5, filter={"user_id": "u1"})
+
+    assert [r.chunk.id for r in results] == ["doc1"]
+
+
+def test_keyword_query_scopes_results_to_matching_metadata():
+    client = FakeQdrantClient()
+    store = QdrantVectorStore("test-collection", client=client)
+    store.upsert(
+        [
+            Chunk(id="doc1", text="agentic OS", metadata={"user_id": "u1"}, embedding=[1.0, 0.0]),
+            Chunk(id="doc2", text="agentic OS", metadata={"user_id": "u2"}, embedding=[1.0, 0.0]),
+        ]
+    )
+
+    results = store.keyword_query("agentic", k=5, filter={"user_id": "u2"})
+
+    assert [r.chunk.id for r in results] == ["doc2"]

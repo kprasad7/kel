@@ -25,6 +25,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+from kel.retrieval.store import MetadataFilter
 from kel.retrieval.types import Chunk, ScoredChunk
 
 _UUID_NAMESPACE = uuid.UUID("6f6e2b1a-2f2a-4b8a-9b0a-1a2b3c4d5e6f")
@@ -32,6 +33,15 @@ _UUID_NAMESPACE = uuid.UUID("6f6e2b1a-2f2a-4b8a-9b0a-1a2b3c4d5e6f")
 
 def _point_id(chunk_id: str) -> str:
     return str(uuid.uuid5(_UUID_NAMESPACE, chunk_id))
+
+
+def _build_filter(filter: MetadataFilter | None, extra_conditions: list[Any] | None = None) -> Any:
+    from qdrant_client.models import FieldCondition, Filter, MatchValue
+
+    conditions = list(extra_conditions or [])
+    for key, value in (filter or {}).items():
+        conditions.append(FieldCondition(key=key, match=MatchValue(value=value)))
+    return Filter(must=conditions) if conditions else None
 
 
 class QdrantVectorStore:
@@ -93,20 +103,23 @@ class QdrantVectorStore:
         ]
         self._client.upsert(collection_name=self.collection_name, points=points)
 
-    def query(self, embedding: list[float], k: int = 5) -> list[ScoredChunk]:
+    def query(self, embedding: list[float], k: int = 5, *, filter: MetadataFilter | None = None) -> list[ScoredChunk]:
         if not self._collection_ready:
             return []
-        response = self._client.query_points(collection_name=self.collection_name, query=embedding, limit=k)
+        response = self._client.query_points(
+            collection_name=self.collection_name, query=embedding, limit=k, query_filter=_build_filter(filter)
+        )
         return [self._to_scored_chunk(hit.payload, hit.score) for hit in response.points]
 
-    def keyword_query(self, query: str, k: int = 5) -> list[ScoredChunk]:
+    def keyword_query(self, query: str, k: int = 5, *, filter: MetadataFilter | None = None) -> list[ScoredChunk]:
         if not self._collection_ready:
             return []
-        from qdrant_client.models import FieldCondition, Filter, MatchText
+        from qdrant_client.models import FieldCondition, MatchText
 
+        text_condition = FieldCondition(key="text", match=MatchText(text=query))
         points, _ = self._client.scroll(
             collection_name=self.collection_name,
-            scroll_filter=Filter(must=[FieldCondition(key="text", match=MatchText(text=query))]),
+            scroll_filter=_build_filter(filter, extra_conditions=[text_condition]),
             limit=k,
         )
         return [self._to_scored_chunk(point.payload, 1.0) for point in points]

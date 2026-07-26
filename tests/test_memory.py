@@ -7,6 +7,7 @@ from kel.memory import (
     Memory,
     ProceduralMemory,
     SemanticMemory,
+    SQLiteEpisodicStore,
     WorkingMemory,
     consolidate,
 )
@@ -40,6 +41,36 @@ def test_file_episodic_store_persists_across_instances():
         transcript = store2.transcript("s1")
         assert [m.text for m in transcript] == ["hello", "hi"]
         assert Path(tmp, "s1.jsonl").exists()
+
+
+def test_sqlite_episodic_store_persists_across_instances():
+    with tempfile.TemporaryDirectory() as tmp:
+        db_path = Path(tmp, "episodic.sqlite")
+        store1 = SQLiteEpisodicStore(db_path)
+        store1.append("s1", Message.user("hello"))
+        store1.append("s1", Message.assistant("hi"))
+        store1.append("s2", Message.user("other session"))
+
+        store2 = SQLiteEpisodicStore(db_path)
+        assert [m.text for m in store2.transcript("s1")] == ["hello", "hi"]
+        assert [m.text for m in store2.transcript("s2")] == ["other session"]
+        assert store2.transcript("missing") == []
+        assert sorted(store2.sessions()) == ["s1", "s2"]
+
+        store1.close()
+        store2.close()
+
+
+def test_sqlite_episodic_store_preserves_message_order_within_a_session():
+    with tempfile.TemporaryDirectory() as tmp:
+        store = SQLiteEpisodicStore(Path(tmp, "episodic.sqlite"))
+        for i in range(10):
+            store.append("s1", Message.user(f"turn {i}"))
+
+        transcript = store.transcript("s1")
+        assert [m.text for m in transcript] == [f"turn {i}" for i in range(10)]
+
+        store.close()
 
 
 def test_semantic_memory_keyword_search_without_embedder():
@@ -151,3 +182,26 @@ def test_memory_does_not_recall_across_instances_with_the_default_in_memory_stor
     second = Memory(session_id="s1")
 
     assert second.working.messages == []
+
+
+def test_memory_recalls_prior_turns_via_sqlite_episodic_store_across_processes():
+    # same recall contract as FileEpisodicStore, but backed by SQLite —
+    # this is the option that also works from multiple worker processes
+    # sharing one file, not just multiple in-process reconstructions.
+    with tempfile.TemporaryDirectory() as tmp:
+        db_path = Path(tmp, "episodic.sqlite")
+        episodic = SQLiteEpisodicStore(db_path)
+
+        first = Memory(session_id="s1", episodic=episodic)
+        first.remember_turn(Message.user("what's the capital of France?"))
+        first.remember_turn(Message.assistant("Paris"))
+
+        # a different SQLiteEpisodicStore instance pointed at the same
+        # file simulates a separate worker process
+        reopened = SQLiteEpisodicStore(db_path)
+        second = Memory(session_id="s1", episodic=reopened)
+
+        assert [m.text for m in second.working.messages] == ["what's the capital of France?", "Paris"]
+
+        episodic.close()
+        reopened.close()

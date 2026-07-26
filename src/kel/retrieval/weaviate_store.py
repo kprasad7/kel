@@ -19,6 +19,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+from kel.retrieval.store import MetadataFilter
 from kel.retrieval.types import Chunk, ScoredChunk
 
 _UUID_NAMESPACE = uuid.UUID("7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d")
@@ -68,6 +69,20 @@ class WeaviateVectorStore:
                     "anonymous self-hosted access via connect_to_local()."
                 )
 
+    def _build_filter(self, filter: MetadataFilter | None) -> Any:
+        if not filter:
+            return None
+        if not self._real_client:
+            # same testability contract as _ensure_collection/query: never
+            # require the real weaviate.classes.query.Filter type when a
+            # fake client is injected — the fake owns its own filter
+            # representation, here just the plain dict.
+            return filter
+        from weaviate.classes.query import Filter
+
+        conditions = [Filter.by_property(key).equal(value) for key, value in filter.items()]
+        return Filter.all_of(conditions) if len(conditions) > 1 else conditions[0]
+
     def _ensure_collection(self) -> Any:
         if not self._collection_ready:
             if not self._client.collections.exists(self.collection_name):
@@ -92,7 +107,7 @@ class WeaviateVectorStore:
                 vector=chunk.embedding,
             )
 
-    def query(self, embedding: list[float], k: int = 5) -> list[ScoredChunk]:
+    def query(self, embedding: list[float], k: int = 5, *, filter: MetadataFilter | None = None) -> list[ScoredChunk]:
         if not self._collection_ready:
             return []
         return_metadata = None
@@ -102,17 +117,19 @@ class WeaviateVectorStore:
             return_metadata = MetadataQuery(distance=True)
 
         collection = self._client.collections.get(self.collection_name)
-        result = collection.query.near_vector(near_vector=embedding, limit=k, return_metadata=return_metadata)
+        result = collection.query.near_vector(
+            near_vector=embedding, limit=k, return_metadata=return_metadata, filters=self._build_filter(filter)
+        )
         return [
             ScoredChunk(chunk=self._to_chunk(obj.properties), score=1.0 - (obj.metadata.distance or 0.0))
             for obj in result.objects
         ]
 
-    def keyword_query(self, query: str, k: int = 5) -> list[ScoredChunk]:
+    def keyword_query(self, query: str, k: int = 5, *, filter: MetadataFilter | None = None) -> list[ScoredChunk]:
         if not self._collection_ready:
             return []
         collection = self._client.collections.get(self.collection_name)
-        result = collection.query.bm25(query=query, limit=k)
+        result = collection.query.bm25(query=query, limit=k, filters=self._build_filter(filter))
         return [ScoredChunk(chunk=self._to_chunk(obj.properties), score=1.0) for obj in result.objects]
 
     def get(self, chunk_id: str) -> Chunk | None:

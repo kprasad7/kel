@@ -4,6 +4,18 @@ from kel.retrieval.pgvector_store import PgVectorStore
 from kel.retrieval.types import Chunk
 
 
+def _matches_metadata_filter(metadata, filter_pairs):
+    # mirrors what Postgres's `metadata->>%s = %s` actually compares:
+    # the JSON value extracted as text, so a stored int/bool must be
+    # compared via its JSON text form, not Python's str().
+    for key, value in zip(filter_pairs[0::2], filter_pairs[1::2], strict=True):
+        actual = metadata.get(key)
+        actual_text = actual if isinstance(actual, str) else json.dumps(actual)
+        if actual_text != value:
+            return False
+    return True
+
+
 class FakeCursor:
     def __init__(self, store):
         self.store = store
@@ -23,13 +35,18 @@ class FakeCursor:
             chunk_id, text, metadata_json, embedding = params
             self.store.rows[chunk_id] = (chunk_id, text, json.loads(metadata_json), embedding)
         elif sql_upper.startswith("SELECT ID, TEXT, METADATA, 1"):
-            embedding = params[0]
-            self._last_result = [
-                (r[0], r[1], r[2], 0.95) for r in list(self.store.rows.values())
-            ]
+            # params: (embedding, *filter_pairs, embedding, k) — filter
+            # pairs (if any) sit between the two embedding params.
+            filter_pairs = params[1:-2]
+            rows = [r for r in self.store.rows.values() if _matches_metadata_filter(r[2], filter_pairs)]
+            self._last_result = [(r[0], r[1], r[2], 0.95) for r in rows]
         elif "ILIKE" in sql_upper:
+            # params: (needle, *filter_pairs, k)
             needle = params[0].strip("%").lower()
-            self._last_result = [r[:3] for r in self.store.rows.values() if needle in r[1].lower()]
+            filter_pairs = params[1:-1]
+            rows = [r for r in self.store.rows.values() if needle in r[1].lower()]
+            rows = [r for r in rows if _matches_metadata_filter(r[2], filter_pairs)]
+            self._last_result = [r[:3] for r in rows]
         elif sql_upper.startswith("SELECT ID, TEXT, METADATA FROM") and "WHERE ID = %S" in sql_upper:
             chunk_id = params[0]
             row = self.store.rows.get(chunk_id)
@@ -97,3 +114,50 @@ def test_query_before_any_upsert_returns_empty():
     store = PgVectorStore("test_table", connection=FakeConnection())
     assert store.query([1.0, 0.0]) == []
     assert store.get("x") is None
+
+
+def test_query_scopes_results_to_matching_metadata():
+    conn = FakeConnection()
+    store = PgVectorStore("test_table", connection=conn)
+    store.upsert(
+        [
+            Chunk(id="doc1", text="a", metadata={"user_id": "u1"}, embedding=[1.0, 0.0]),
+            Chunk(id="doc2", text="b", metadata={"user_id": "u2"}, embedding=[1.0, 0.0]),
+        ]
+    )
+
+    results = store.query([1.0, 0.0], k=5, filter={"user_id": "u1"})
+
+    assert [r.chunk.id for r in results] == ["doc1"]
+
+
+def test_keyword_query_scopes_results_to_matching_metadata():
+    conn = FakeConnection()
+    store = PgVectorStore("test_table", connection=conn)
+    store.upsert(
+        [
+            Chunk(id="doc1", text="agentic OS", metadata={"user_id": "u1"}, embedding=[1.0, 0.0]),
+            Chunk(id="doc2", text="agentic OS", metadata={"user_id": "u2"}, embedding=[1.0, 0.0]),
+        ]
+    )
+
+    results = store.keyword_query("agentic", k=5, filter={"user_id": "u2"})
+
+    assert [r.chunk.id for r in results] == ["doc2"]
+
+
+def test_filter_matches_non_string_metadata_values_correctly():
+    # non-string values are compared via their JSON text form (what
+    # Postgres's `->>` operator actually returns), not Python's str()
+    conn = FakeConnection()
+    store = PgVectorStore("test_table", connection=conn)
+    store.upsert(
+        [
+            Chunk(id="doc1", text="a", metadata={"is_active": True, "rank": 1}, embedding=[1.0, 0.0]),
+            Chunk(id="doc2", text="b", metadata={"is_active": False, "rank": 2}, embedding=[1.0, 0.0]),
+        ]
+    )
+
+    results = store.query([1.0, 0.0], k=5, filter={"is_active": True, "rank": 1})
+
+    assert [r.chunk.id for r in results] == ["doc1"]

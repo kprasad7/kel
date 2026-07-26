@@ -21,7 +21,27 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from kel.retrieval.store import MetadataFilter
 from kel.retrieval.types import Chunk, ScoredChunk
+
+
+def _json_text(value: Any) -> str:
+    """Matches what Postgres's `->>` (extract-JSON-field-as-text) operator
+    returns for a value of this type, so a filter value compares
+    correctly regardless of whether it was stored as a JSON string,
+    number, or bool (`->>'key'` of a JSON `true` is the text `'true'`,
+    not Python's `str(True)` == `'True'`)."""
+    return value if isinstance(value, str) else json.dumps(value)
+
+
+def _build_filter_clause(filter: MetadataFilter | None) -> tuple[str, list[Any]]:
+    if not filter:
+        return "", []
+    conditions = " AND ".join("metadata->>%s = %s" for _ in filter)
+    params: list[Any] = []
+    for key, value in filter.items():
+        params.extend([key, _json_text(value)])
+    return f" AND ({conditions})", params
 
 
 class PgVectorStore:
@@ -88,25 +108,28 @@ class PgVectorStore:
                     (chunk.id, chunk.text, json.dumps(chunk.metadata), chunk.embedding),
                 )
 
-    def query(self, embedding: list[float], k: int = 5) -> list[ScoredChunk]:
+    def query(self, embedding: list[float], k: int = 5, *, filter: MetadataFilter | None = None) -> list[ScoredChunk]:
         if not self._table_ready:
             return []
+        filter_clause, filter_params = _build_filter_clause(filter)
         with self._conn.cursor() as cur:
             cur.execute(
                 f"SELECT id, text, metadata, 1 - (embedding <=> %s) AS score FROM {self.table_name} "  # nosec B608 - table_name is developer-controlled, not user input
+                f"WHERE TRUE{filter_clause} "
                 f"ORDER BY embedding <=> %s LIMIT %s",
-                (embedding, embedding, k),
+                (embedding, *filter_params, embedding, k),
             )
             rows = cur.fetchall()
         return [ScoredChunk(chunk=Chunk(id=r[0], text=r[1] or "", metadata=r[2] or {}), score=r[3]) for r in rows]
 
-    def keyword_query(self, query: str, k: int = 5) -> list[ScoredChunk]:
+    def keyword_query(self, query: str, k: int = 5, *, filter: MetadataFilter | None = None) -> list[ScoredChunk]:
         if not self._table_ready:
             return []
+        filter_clause, filter_params = _build_filter_clause(filter)
         with self._conn.cursor() as cur:
             cur.execute(
-                f"SELECT id, text, metadata FROM {self.table_name} WHERE text ILIKE %s LIMIT %s",  # nosec B608 - table_name is developer-controlled, not user input
-                (f"%{query}%", k),
+                f"SELECT id, text, metadata FROM {self.table_name} WHERE text ILIKE %s{filter_clause} LIMIT %s",  # nosec B608 - table_name is developer-controlled, not user input
+                (f"%{query}%", *filter_params, k),
             )
             rows = cur.fetchall()
         return [ScoredChunk(chunk=Chunk(id=r[0], text=r[1] or "", metadata=r[2] or {}), score=1.0) for r in rows]

@@ -18,8 +18,19 @@ class FakeQuery:
     def __init__(self, objects):
         self._objects = objects
 
-    def near_vector(self, near_vector, limit, return_metadata):
-        items = list(self._objects.items())[:limit]
+    @staticmethod
+    def _matches_filter(properties, filters):
+        # WeaviateVectorStore._build_filter passes the plain filter dict
+        # straight through for a non-real (fake/injected) client — see
+        # its docstring — so the fake just does equality matching itself.
+        if not filters:
+            return True
+        return all(properties.get(key) == value for key, value in filters.items())
+
+    def near_vector(self, near_vector, limit, return_metadata, filters=None):
+        items = [
+            (uid, data) for uid, data in self._objects.items() if self._matches_filter(data["properties"], filters)
+        ][:limit]
         return SimpleNamespace(
             objects=[
                 SimpleNamespace(properties=data["properties"], metadata=SimpleNamespace(distance=0.1))
@@ -27,11 +38,12 @@ class FakeQuery:
             ]
         )
 
-    def bm25(self, query, limit):
+    def bm25(self, query, limit, filters=None):
         matches = [
             SimpleNamespace(properties=data["properties"])
             for data in self._objects.values()
             if query.lower() in data["properties"].get("text", "").lower()
+            and self._matches_filter(data["properties"], filters)
         ][:limit]
         return SimpleNamespace(objects=matches)
 
@@ -130,6 +142,51 @@ def test_query_before_any_upsert_returns_empty():
     store = WeaviateVectorStore("TestCollection", client=FakeClient())
     assert store.query([1.0, 0.0]) == []
     assert store.get("x") is None
+
+
+def test_query_scopes_results_to_matching_metadata():
+    from kel.retrieval.types import Chunk
+
+    client = FakeClient()
+    store = WeaviateVectorStore("TestCollection", client=client)
+    store.upsert(
+        [
+            Chunk(id="doc1", text="a", metadata={"user_id": "u1"}, embedding=[1.0, 0.0]),
+            Chunk(id="doc2", text="b", metadata={"user_id": "u2"}, embedding=[1.0, 0.0]),
+        ]
+    )
+
+    results = store.query([1.0, 0.0], k=5, filter={"user_id": "u1"})
+
+    assert [r.chunk.id for r in results] == ["doc1"]
+
+
+def test_keyword_query_scopes_results_to_matching_metadata():
+    from kel.retrieval.types import Chunk
+
+    client = FakeClient()
+    store = WeaviateVectorStore("TestCollection", client=client)
+    store.upsert(
+        [
+            Chunk(id="doc1", text="agentic OS", metadata={"user_id": "u1"}, embedding=[1.0, 0.0]),
+            Chunk(id="doc2", text="agentic OS", metadata={"user_id": "u2"}, embedding=[1.0, 0.0]),
+        ]
+    )
+
+    results = store.keyword_query("agentic", k=5, filter={"user_id": "u2"})
+
+    assert [r.chunk.id for r in results] == ["doc2"]
+
+
+def test_filter_never_needs_real_weaviate_classes_either():
+    # same testability contract as test_injected_client_never_needs_real_weaviate_classes,
+    # extended to cover the filter parameter specifically.
+    from kel.retrieval.types import Chunk
+
+    store = WeaviateVectorStore("TestCollection", client=FakeClient())
+    store.upsert([Chunk(id="doc1", text="hello", metadata={"user_id": "u1"}, embedding=[1.0, 0.0])])
+    store.query([1.0, 0.0], filter={"user_id": "u1"})
+    store.keyword_query("hello", filter={"user_id": "u1"})
 
 
 def test_injected_client_never_needs_real_weaviate_classes():

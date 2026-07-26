@@ -8,12 +8,22 @@ none of this is aspirational.
 ## Install
 
 ```bash
+pip install pykel               # from PyPI — the distribution name is
+                                 # "pykel" (the "kel" name was already
+                                 # registered), but `import kel` and the
+                                 # `kel` CLI command are unaffected
+pip install "pykel[anthropic]"  # + Anthropic provider
+pip install "pykel[openai]"     # + OpenAI provider
+pip install "pykel[cohere]"     # + Cohere provider
+pip install "pykel[otel]"       # + Grafana/OTLP trace export
+pip install "pykel[s3]"         # + S3-compatible blob storage
+pip install "pykel[all]"        # everything
+```
+
+Working from a clone instead of PyPI:
+
+```bash
 pip install -e ".[dev]"        # core + test tooling
-pip install -e ".[anthropic]"  # + Anthropic provider
-pip install -e ".[openai]"     # + OpenAI provider
-pip install -e ".[cohere]"     # + Cohere provider
-pip install -e ".[otel]"       # + Grafana/OTLP trace export
-pip install -e ".[s3]"         # + S3-compatible blob storage
 pip install -e ".[all]"        # everything
 ```
 
@@ -84,7 +94,7 @@ add_sink(spans)          # keep console output, also capture spans in memory
 # configure([ConsoleSink()])  # or replace the sink list entirely
 ```
 
-Export to Grafana (via an OTel Collector → Tempo), requires `kel[otel]`:
+Export to Grafana (via an OTel Collector → Tempo), requires `pykel[otel]`:
 
 ```python
 from kel.observability.otel import configure_otlp
@@ -175,6 +185,36 @@ memory.working.messages          # current context window
 memory.episodic.transcript("user-42")   # full session history
 ```
 
+**Recalling a session across process restarts / script reruns.** By
+default `Memory()` uses an `InMemoryEpisodicStore`, which doesn't outlive
+the process — a fresh `Memory(session_id="user-42")` in a new process
+starts empty. Pass a durable store instead (`FileEpisodicStore`,
+`SQLiteEpisodicStore` — a single file usable from multiple *processes*
+sharing it, not just multiple in-process reconstructions — or your own
+backend) and working memory is seeded automatically from that session's
+existing transcript:
+
+```python
+from kel.memory import FileEpisodicStore, Memory
+
+episodic = FileEpisodicStore("./sessions")
+
+# first run
+memory = Memory(session_id="user-42", episodic=episodic)
+memory.remember_turn(Message.user("what's the capital of France?"))
+memory.remember_turn(Message.assistant("Paris"))
+
+# a later run (new process, or a Streamlit-style script rerun) —
+# same store, same session_id: working memory already has both turns
+memory2 = Memory(session_id="user-42", episodic=episodic)
+memory2.working.messages  # ["what's the capital of France?", "Paris"]
+```
+
+This is exactly what `Agent(..., memory=Memory(session_id=..., episodic=episodic))`
+needs for a web UI that recreates the `Agent` object on every request/rerun
+but wants the conversation to persist — construct `Memory` yourself with a
+shared `episodic` store instead of letting `Agent` default to a fresh one.
+
 Semantic memory (long-term facts), procedural memory (learned patterns as `.md`):
 
 ```python
@@ -214,6 +254,30 @@ for r in results:
 `NaiveHashEmbedder` is zero-dependency and good for local dev only — pass
 any `Callable[[str], list[float]]` (e.g. a real embedding API call) instead
 for production relevance.
+
+**Scoping a search to metadata** — every backend (InMemory, Qdrant,
+Pinecone, Weaviate, Chroma, pgvector) supports `filter`, an exact-match-
+on-every-key dict:
+
+```python
+retriever.retrieve("wireless mouse", k=5, filter={"user_id": "u1"})
+retriever.retrieve_hybrid("wireless mouse", k=5, filter={"source": "amazon"})
+```
+
+**Reranking** — a second, more expensive relevance pass over a wider
+first-stage candidate pool, using any `ChatModel` (no cross-encoder model
+or new dependency needed):
+
+```python
+from kel.retrieval import LLMReranker
+
+retriever = Retriever(store, embedder=embed, reranker=LLMReranker(get_model("anthropic:claude-sonnet-5")))
+retriever.retrieve("how do refunds work?", k=5)  # overfetches, then reranks down to 5
+```
+
+**Document loaders** (`kel.retrieval`): `load_pdf`/`load_pdf_pages`
+(`pip install kel[pdf]`), plus stdlib-only `load_html` and `load_csv`/
+`load_csv_rows` — no extra dependency for either.
 
 ---
 
@@ -280,6 +344,43 @@ agent = Agent("weather-agent", get_model("anthropic:claude-sonnet-5"), system_pr
 response = agent.run("what's the weather in Paris?")
 print(response.text)
 ```
+
+Generation config (`max_tokens`/`temperature`) is set on the `Agent`, not
+per `.run()` call, and forwarded to every model call (`run`/`arun`/
+`run_stream`/`arun_stream`). Leave them unset and each provider adapter's
+own default applies (e.g. 1024 tokens) — passing them overrides it:
+
+```python
+agent = Agent("weather-agent", get_model("anthropic:claude-sonnet-5"), max_tokens=4096, temperature=0.2)
+```
+
+If a model turn ever comes back with no text and no tool calls (a
+truncated/degenerate response, not a legitimate empty answer), `Agent`
+raises `EmptyModelResponseError` (`kel.agents.errors`) instead of storing
+it into memory — an empty assistant turn left in shared history would
+otherwise corrupt every later question in the same session.
+
+When a model requests several tools in one turn, `Agent` runs them
+concurrently (not one at a time) — `run`/`arun` collect all results
+before continuing; `run_stream`/`arun_stream` yield each `ToolResultEvent`
+as its own call actually finishes, so a UI can show real per-tool
+progress, not just a report after the slowest one.
+
+**Approving tool calls before they run** — `approve_tool_call` is an
+injected `(name, input) -> bool` gate, checked once per call across every
+run variant. Return `False` to reject a call before it executes:
+
+```python
+def approve(name: str, input: dict) -> bool:
+    return name != "delete_file" or input.get("confirmed") is True
+
+agent = Agent("assistant", model, tools=[delete_tool], approve_tool_call=approve)
+```
+
+A rejected call never runs — the agent sees an error tool result
+("rejected by approval hook") instead, same as any other tool failure.
+Leaving it unset (the default) approves every call, matching prior
+behavior.
 
 Multi-agent patterns — each `Agent` can use its own model/API key, or share one:
 
@@ -433,7 +534,7 @@ raises `pickle.UnpicklingError` instead of executing it — see
 `tests/test_storage.py::test_file_checkpoint_store_refuses_malicious_pickle_payload`
 for a proof-of-concept that's actually run in CI.
 
-S3-compatible backend (`pip install kel[s3]`):
+S3-compatible backend (`pip install "pykel[s3]"`):
 
 ```python
 from kel.storage.s3 import S3BlobStore
@@ -465,7 +566,15 @@ CLI:
 kel run agents/weather.md "what's the weather in Paris?"
 kel eval agents/weather.md agents/weather.eval.md
 kel trace tests/cassettes/basic.json
+kel --version    # or bare `kel` for the banner + help
 ```
+
+`python -m kel.sdk.cli ...` also works as an alternative to the installed
+`kel` console-script. It prints a harmless `RuntimeWarning` about the
+`kel.sdk.cli` module being imported twice (an artifact of `kel.sdk`
+eagerly re-exporting `cli` for the `from kel.sdk import main` convenience
+import, combined with how `python -m` executes a module) — the command
+itself still runs correctly.
 
 ---
 
@@ -628,9 +737,9 @@ result = generate_structured(model, [Message.user("what is 6*7")], Answer)
 
 # Recursive (structure-aware) splitter + Qdrant + PDF loader
 from kel.retrieval import recursive_split_text, load_pdf
-from kel.retrieval.qdrant import QdrantVectorStore  # pip install kel[qdrant]
+from kel.retrieval.qdrant import QdrantVectorStore  # pip install pykel[qdrant]
 retriever = Retriever(QdrantVectorStore("my-collection"), embedder=..., splitter=recursive_split_text)
-retriever.ingest(load_pdf("handbook.pdf"))  # pip install kel[pdf]
+retriever.ingest(load_pdf("handbook.pdf"))  # pip install pykel[pdf]
 
 # Streaming at the agent-loop level (not just one model call)
 for event in agent.run_stream("what's 2+2 and search wikipedia for Python"):
@@ -686,7 +795,7 @@ JSON if you want to feed it elsewhere instead of using the HTML page.
 
 This is explicitly a local/dev view, not a production metrics backend —
 in-memory, per-process, resets on restart. For durable/production
-dashboards, export to Grafana via `kel[otel]` instead (§2).
+dashboards, export to Grafana via `pykel[otel]` instead (§2).
 
 ---
 
@@ -703,19 +812,19 @@ from kel import get_model
 get_model("anthropic:claude-sonnet-5")
 get_model("openai:gpt-5.2")
 get_model("cohere:command-a-03-2025")
-get_model("gemini:gemini-2.5-flash")     # pip install kel[gemini] — falls back to GEMINI_API_KEY/ADC
-get_model("mistral:mistral-large-latest") # pip install kel[mistral] — falls back to MISTRAL_API_KEY
+get_model("gemini:gemini-2.5-flash")     # pip install pykel[gemini] — falls back to GEMINI_API_KEY/ADC
+get_model("mistral:mistral-large-latest") # pip install pykel[mistral] — falls back to MISTRAL_API_KEY
 ```
 
 **5 vector store adapters** (plus the in-memory one for local dev):
 
 ```python
 from kel.retrieval import InMemoryVectorStore
-from kel.retrieval.qdrant import QdrantVectorStore              # pip install kel[qdrant]
-from kel.retrieval.pinecone_store import PineconeVectorStore     # pip install kel[pinecone]
-from kel.retrieval.weaviate_store import WeaviateVectorStore     # pip install kel[weaviate] — no key needed for self-hosted
-from kel.retrieval.chroma_store import ChromaVectorStore         # pip install kel[chroma] — local mode needs nothing at all
-from kel.retrieval.pgvector_store import PgVectorStore           # pip install kel[pgvector] — password optional
+from kel.retrieval.qdrant import QdrantVectorStore              # pip install pykel[qdrant]
+from kel.retrieval.pinecone_store import PineconeVectorStore     # pip install pykel[pinecone]
+from kel.retrieval.weaviate_store import WeaviateVectorStore     # pip install pykel[weaviate] — no key needed for self-hosted
+from kel.retrieval.chroma_store import ChromaVectorStore         # pip install pykel[chroma] — local mode needs nothing at all
+from kel.retrieval.pgvector_store import PgVectorStore           # pip install pykel[pgvector] — password optional
 ```
 
 **5 built-in tools**: `web_search` (7 providers — see §16), `fetch_url`,
@@ -739,7 +848,7 @@ adapter's constructor signature directly — not just documented, enforced:
 
 - `kel.testing` replay covers `generate()`, not `stream()`.
 - No `kel init <template>` project scaffolding.
-- No local trace-viewer UI — `kel trace` (CLI) and Grafana (via `kel[otel]`) are the two ways to look at a run today.
+- No local trace-viewer UI — `kel trace` (CLI) and Grafana (via `pykel[otel]`) are the two ways to look at a run today.
 - `python_exec_tool`/`shell_exec_tool` are process-isolated with a timeout, not a real security sandbox — don't run untrusted/adversarial code through either.
 - Cache keys (`kel.caching`) cover `generate()`'s named parameters only, not arbitrary provider-specific `**kwargs`.
 - Rate limiting reserves an *estimated* token cost up front and doesn't refund the difference against actual usage — conservative, not exact.

@@ -26,7 +26,17 @@ from __future__ import annotations
 
 from typing import Any
 
+from kel.retrieval.store import MetadataFilter
 from kel.retrieval.types import Chunk, ScoredChunk
+
+
+def _to_chroma_where(filter: MetadataFilter | None) -> dict[str, Any] | None:
+    if not filter:
+        return None
+    if len(filter) == 1:
+        key, value = next(iter(filter.items()))
+        return {key: value}
+    return {"$and": [{key: value} for key, value in filter.items()]}
 
 
 class ChromaVectorStore:
@@ -73,8 +83,8 @@ class ChromaVectorStore:
             metadatas=[c.metadata or {} for c in embedded],
         )
 
-    def query(self, embedding: list[float], k: int = 5) -> list[ScoredChunk]:
-        result = self._collection.query(query_embeddings=[embedding], n_results=k)
+    def query(self, embedding: list[float], k: int = 5, *, filter: MetadataFilter | None = None) -> list[ScoredChunk]:
+        result = self._collection.query(query_embeddings=[embedding], n_results=k, where=_to_chroma_where(filter))
         ids = result["ids"][0] if result["ids"] else []
         docs = result["documents"][0] if result.get("documents") else [""] * len(ids)
         metas = result["metadatas"][0] if result.get("metadatas") else [{}] * len(ids)
@@ -84,8 +94,10 @@ class ChromaVectorStore:
             for i, d, m, dist in zip(ids, docs, metas, distances, strict=True)
         ]
 
-    def keyword_query(self, query: str, k: int = 5) -> list[ScoredChunk]:
-        result = self._collection.get(where_document={"$contains": query}, limit=k)
+    def keyword_query(self, query: str, k: int = 5, *, filter: MetadataFilter | None = None) -> list[ScoredChunk]:
+        result = self._collection.get(
+            where_document={"$contains": query}, where=_to_chroma_where(filter), limit=k
+        )
         ids = result.get("ids", [])
         docs = result.get("documents") or [""] * len(ids)
         metas = result.get("metadatas") or [{}] * len(ids)

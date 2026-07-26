@@ -1,3 +1,4 @@
+import time
 
 from helpers import ScriptedModel, ScriptedStreamModel
 from kel.agents import Agent, Tool, ToolResultEvent
@@ -67,3 +68,51 @@ async def test_arun_stream_yields_events_using_astream():
     text = "".join(e.text for e in collected if isinstance(e, TextDelta))
     assert text == "async "
     assert collected[-1].response.text == "async hi"
+
+
+def test_run_stream_yields_tool_results_as_each_completes_not_submission_order():
+    # regression: multiple tool calls in one turn used to run sequentially;
+    # proof here is via completion order, not timing — "slow" is requested
+    # first but "fast" finishes first, which can only happen if they ran
+    # concurrently (sequential execution would always finish in request order).
+    tool_use_response = ModelResponse(
+        id="r1",
+        model="fake-1",
+        content=[ToolUsePart(id="1", name="slow", input={}), ToolUsePart(id="2", name="fast", input={})],
+        stop_reason="tool_use",
+        usage=Usage(),
+    )
+    events = [[MessageStop(response=tool_use_response)], [MessageStop(response=_final_text_response("done", "r2"))]]
+    model = ScriptedStreamModel("fake-1", events)
+    tools = [
+        Tool(name="slow", description="", input_schema={}, fn=lambda i: (time.sleep(0.1), "slow done")[1]),
+        Tool(name="fast", description="", input_schema={}, fn=lambda i: "fast done"),
+    ]
+    agent = Agent("a", model, tools=tools)
+
+    collected = list(agent.run_stream("do both"))
+
+    tool_events = [e for e in collected if isinstance(e, ToolResultEvent)]
+    assert [e.name for e in tool_events] == ["fast", "slow"]
+
+
+async def test_arun_stream_yields_tool_results_as_each_completes_not_submission_order():
+    tool_use_response = ModelResponse(
+        id="r1",
+        model="fake-1",
+        content=[ToolUsePart(id="1", name="slow", input={}), ToolUsePart(id="2", name="fast", input={})],
+        stop_reason="tool_use",
+        usage=Usage(),
+    )
+    events = [[MessageStop(response=tool_use_response)], [MessageStop(response=_final_text_response("done", "r2"))]]
+    model = ScriptedStreamModel("fake-1", events)
+    tools = [
+        Tool(name="slow", description="", input_schema={}, fn=lambda i: (time.sleep(0.1), "slow done")[1]),
+        Tool(name="fast", description="", input_schema={}, fn=lambda i: "fast done"),
+    ]
+    agent = Agent("a", model, tools=tools)
+
+    collected = [event async for event in agent.arun_stream("do both")]
+
+    tool_events = [e for e in collected if isinstance(e, ToolResultEvent)]
+    assert [e.name for e in tool_events] == ["fast", "slow"]
