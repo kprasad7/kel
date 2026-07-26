@@ -414,7 +414,7 @@ result = run_eval_case(cases[0], respond=lambda text: agent.run(text).text)
 ```
 
 Grading by criteria instead of substring match — `llm_judge` is the
-one-call primitive `run_llm_graded_eval_suite` (§17) is built on, useful
+one-call primitive `run_llm_graded_eval_suite` (§18) is built on, useful
 directly when you want a `Grade` (`passed`/`score`/`reasoning`) for a
 single input/output pair without a full `EvalCase`:
 
@@ -1009,7 +1009,127 @@ class MyTTS:                                     # satisfies TTSProvider structu
 
 ---
 
-## 16. Built-in tools (`kel.tools`)
+## 16. Media generation — image / video / audio / lipsync (`kel.media`, `pip install "pykel[fal]"`)
+
+A generic gateway for third-party generative-media APIs, following the
+same `"provider:model"` spec pattern as `kel.get_model`. Today's one
+built-in provider is **fal.ai**, chosen because its platform already
+covers every media type (image, video, text-to-speech, lipsync) through
+one consistent request shape — submit `arguments` to a named model
+endpoint, get a result back — so a single generic `FalMediaModel` class
+handles all of them instead of kel shipping one bespoke wrapper class per
+media type. The registry is open (`register_media_provider`) for another
+vendor to be added the same way later.
+
+**Image generation** — "scale" (resolution, aspect ratio) is just an
+argument the specific endpoint defines, not something kel hardcodes:
+
+```python
+from kel.media import get_image_model
+
+image_model = get_image_model("fal:fal-ai/flux/schnell", api_key="...")
+result = image_model.generate(prompt="a lighthouse at sunset", image_size="landscape_16_9")
+
+result.raw    # the full, endpoint-specific response dict
+result.urls   # every URL found anywhere in the response, e.g. ["https://.../output.png"]
+```
+
+**Video generation** — same pattern, a different endpoint and arguments
+(duration, fps, resolution — whatever that specific model exposes):
+
+```python
+from kel.media import get_video_model
+
+video_model = get_video_model("fal:fal-ai/kling-video/v1.6/standard/text-to-video", api_key="...")
+result = video_model.generate(prompt="a drone shot flying over mountains", duration=5)
+result.urls[0]   # the generated video's URL
+```
+
+**Text-to-speech / audio**:
+
+```python
+from kel.media import get_audio_model
+
+audio_model = get_audio_model("fal:fal-ai/elevenlabs/tts/turbo-v2.5", api_key="...")
+result = audio_model.generate(text="Hello from kel.")
+result.urls[0]   # the generated audio's URL
+```
+
+**Lipsync** (video + audio in, a lip-synced video out) — no new class
+needed, same `generate(**arguments)` call, just a different endpoint's
+argument names:
+
+```python
+from kel.media import get_lipsync_model
+
+lipsync_model = get_lipsync_model("fal:fal-ai/sync-lipsync", api_key="...")
+result = lipsync_model.generate(video_url="https://.../face.mp4", audio_url="https://.../speech.wav")
+```
+
+**Async** — every model has an `agenerate()` counterpart:
+
+```python
+result = await image_model.agenerate(prompt="a lighthouse at sunset")
+```
+
+**Testing without hitting the real API** — same dependency-injection
+pattern as every other adapter in kel (`client=` instead of a real
+vendor SDK):
+
+```python
+from kel.media import FalMediaModel
+
+class FakeFalClient:
+    def run(self, endpoint, arguments):
+        return {"images": [{"url": "https://fake/out.png"}]}
+
+model = FalMediaModel("fal-ai/flux/schnell", client=FakeFalClient())
+result = model.generate(prompt="test")
+```
+
+**Adding another provider** without touching kel's source — the same
+open-registry pattern as `kel.models.register_provider`:
+
+```python
+from kel.media import register_media_provider
+
+def my_vendor_factory(model_ref, **kwargs):
+    return MyVendorMediaModel(model_ref, **kwargs)
+
+register_media_provider("my-vendor", my_vendor_factory)
+get_image_model("my-vendor:some-model")
+```
+
+**Real STT/TTS for `kel.realtime`, backed by fal** — `FalTTSProvider`/
+`FalSTTProvider` satisfy `kel.realtime`'s `TTSProvider`/`STTProvider`
+Protocols (§15) using a `FalMediaModel` underneath, closing that module's
+"wire up your own vendor" gap for anyone using fal specifically:
+
+```python
+from kel.media import FalMediaModel, FalTTSProvider, FalSTTProvider
+from kel.realtime import run_dual_path
+
+tts = FalTTSProvider(FalMediaModel("fal-ai/elevenlabs/tts/turbo-v2.5", api_key="..."))
+audio_bytes = tts.synthesize("let me check that")   # downloads the generated audio URL for you
+
+# STT needs a URL, not raw bytes — inject however you upload audio (fal's
+# own file upload, a presigned S3 URL, anything reachable over HTTP)
+def upload_to_my_storage(audio_bytes: bytes) -> str:
+    ...  # your own upload, returns a URL fal can fetch
+
+stt = FalSTTProvider(FalMediaModel("fal-ai/whisper", api_key="..."), upload_to_my_storage)
+result = stt.transcribe(microphone_audio_bytes)
+result.text
+```
+
+Not exercised against a live fal.ai API key — implemented against fal's
+documented `fal_client` SDK shape and verified against injected fakes in
+the test suite, same honesty as the other provider adapters' status in
+the Known Gaps section at the bottom of this file.
+
+---
+
+## 17. Built-in tools (`kel.tools`)
 
 kel's built-in tool library — each function returns a
 `kel.agents.Tool`, ready to hand straight to `Agent(..., tools=[...])`.
@@ -1135,7 +1255,7 @@ holding it open for the process's lifetime.
 
 ---
 
-## 17. Feature-parity additions
+## 18. Feature-parity additions
 
 Added to close specific gaps against other LLM orchestration frameworks — each is real and tested, not a stub:
 
@@ -1208,7 +1328,7 @@ answer = extract_final_answer(response_text)   # text after the last "Final Answ
 
 ---
 
-## 18. Lightweight live monitoring dashboard (`kel.monitoring`)
+## 19. Lightweight live monitoring dashboard (`kel.monitoring`)
 
 A zero-new-dependency dashboard — stdlib `http.server` only, same pattern
 as `kel.sdk.serve`. `MetricsSink` is just another `kel.observability`
@@ -1237,7 +1357,7 @@ dashboards, export to Grafana via `pykel[otel]` instead (§2).
 
 ---
 
-## 19. Provider / vector DB / tool breadth
+## 20. Provider / vector DB / tool breadth
 
 Not chasing "100+ integrations" (see DESIGN.md §7), but covering the real,
 commonly-requested top picks in each category:
@@ -1265,7 +1385,7 @@ from kel.retrieval.chroma_store import ChromaVectorStore         # pip install p
 from kel.retrieval.pgvector_store import PgVectorStore           # pip install pykel[pgvector] — password optional
 ```
 
-**5 built-in tools**: `web_search` (7 providers — see §16), `fetch_url`,
+**5 built-in tools**: `web_search` (7 providers — see §17), `fetch_url`,
 `python_exec`, `sql_query`, `shell_exec` — all from `kel.tools`.
 
 **Credentials are optional everywhere it matters**, verified by a
@@ -1291,6 +1411,7 @@ adapter's constructor signature directly — not just documented, enforced:
 - Cache keys (`kel.caching`) cover `generate()`'s named parameters only, not arbitrary provider-specific `**kwargs`.
 - Rate limiting reserves an *estimated* token cost up front and doesn't refund the difference against actual usage — conservative, not exact.
 - Pinecone has no built-in keyword/full-text search on the base vector index — `PineconeVectorStore.keyword_query` returns an empty list.
-- Nothing here has been exercised against a live API key or a real OTLP/vector-DB/database server except the Cohere path used in the separate `cohere-agent` demo project — everything else (including all 5 vector store adapters, Gemini, Mistral) is tested against fakes/mocks in the test suite.
+- `kel.media` ships one provider (fal.ai) — real image/video/audio/lipsync generation is only as broad as whatever's hosted on fal's platform; another vendor needs `register_media_provider`.
+- Nothing here has been exercised against a live API key or a real OTLP/vector-DB/database server except the Cohere path used in the separate `cohere-agent` demo project — everything else (including all 5 vector store adapters, Gemini, Mistral, and `kel.media`'s fal.ai adapter) is tested against fakes/mocks in the test suite.
 
 

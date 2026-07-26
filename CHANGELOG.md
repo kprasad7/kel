@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-07-26
+
+### Added
+- `kel.media` (`pip install "pykel[fal]"`): a new generic gateway for third-party generative-media APIs — image generation, video generation, text-to-speech, and lipsync — via `get_image_model()`/`get_video_model()`/`get_audio_model()`/`get_lipsync_model()`, all resolving `"provider:model"` specs the same way `kel.get_model` does. One built-in provider (fal.ai) covers all four media types through a single generic `FalMediaModel` class, since fal's platform already exposes every media type through the same request shape; `register_media_provider` keeps the registry open for another vendor. `FalTTSProvider`/`FalSTTProvider` also close `kel.realtime`'s "wire up your own vendor" gap with a real, concrete fal.ai-backed implementation of its `TTSProvider`/`STTProvider` Protocols. Same dependency-injection (`client=`) testing pattern as every other adapter — not exercised against a live fal.ai key, implemented against fal's documented SDK shape and verified against injected fakes.
+
 ## [1.6.0] - 2026-07-26
 
 ### Added
@@ -111,7 +116,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.md`-based agent specs, CLI (`run`/`eval`/`trace`), and `serve()` HTTP runtime.
 - DevSecOps pipeline: Trivy, pip-audit, and Bandit scanning; Dependabot.
 
-[Unreleased]: https://github.com/kprasad7/kel/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/kprasad7/kel/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/kprasad7/kel/releases/tag/v1.7.0
 [1.6.0]: https://github.com/kprasad7/kel/releases/tag/v1.6.0
 [1.5.1]: https://github.com/kprasad7/kel/releases/tag/v1.5.1
 [1.5.0]: https://github.com/kprasad7/kel/releases/tag/v1.5.0

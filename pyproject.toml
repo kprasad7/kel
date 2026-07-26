@@ -79,8 +79,9 @@ pdf = ["pypdf>=4.0"]
 mcp = ["mcp>=1.0"]
 websockets = ["websockets>=12.0"]
 fastapi = ["fastapi>=0.100", "uvicorn>=0.23"]
+fal = ["fal-client>=0.5"]
 all = [
-    "pykel[anthropic,openai,cohere,gemini,mistral,otel,s3,qdrant,pinecone,weaviate,chroma,pgvector,pdf,mcp,websockets,fastapi]",
+    "pykel[anthropic,openai,cohere,gemini,mistral,otel,s3,qdrant,pinecone,weaviate,chroma,pgvector,pdf,mcp,websockets,fastapi,fal]",
 ]
 dev = [
     "pytest>=8.0",
