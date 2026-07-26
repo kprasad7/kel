@@ -5,6 +5,7 @@ on:
     branches: [develop, main]
   pull_request:
     branches: [develop, main]
+  workflow_call: {}  # lets publish.yml gate a release on the full test matrix passing
 
 jobs:
   lint:
