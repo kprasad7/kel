@@ -41,6 +41,27 @@ def test_summarization_eviction_replaces_old_messages_with_summary():
     assert window.messages[-1].text == "x" * 200
 
 
+def test_summarization_eviction_protects_the_summary_under_a_tight_budget():
+    # regression: when [summary, *recent] is still over budget, the old
+    # implementation handed it to sliding_window_eviction, which drops
+    # from the *front* of the list — and the summary sits at the front,
+    # so a tight budget silently discarded the summary itself (the whole
+    # point of summarizing) rather than trimming the recent messages.
+    def fake_summarize(messages: list[Message]) -> Message:
+        return Message.assistant("SUMMARY_MARKER")
+
+    policy = make_summarization_eviction(fake_summarize, keep_recent=4)
+    # summary is tiny (~4 tokens); recent messages are large enough that
+    # keeping all 4 alongside the summary blows the budget
+    recent = [_long_message(Message.user, 400) for _ in range(4)]
+    messages = [_long_message(Message.user, 100) for _ in range(3)] + recent
+
+    result = policy(messages, max_tokens=150)
+
+    assert any("SUMMARY_MARKER" in m.text for m in result), "summary must survive, not be the first thing evicted"
+    assert len(result) < len(recent) + 1  # at least one recent message had to be trimmed to fit
+
+
 def test_tokens_remaining_reflects_usage():
     window = ContextWindow(max_tokens=1000)
     window.add(Message.user("hi"))

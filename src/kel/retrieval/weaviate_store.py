@@ -34,6 +34,15 @@ class WeaviateVectorStore:
     ):
         self.collection_name = collection_name
         self._collection_ready = False
+        # Tracks whether `weaviate.classes.*` helper types (MetadataQuery,
+        # Configure) should be constructed for real. With an injected
+        # client (tests, or a caller's own fake), those real vendor types
+        # are never needed — constructing them anyway would mean an
+        # injected fake client still requires the real weaviate-client
+        # package installed just to build a query, breaking the same
+        # dependency-injection testability every other adapter (Chroma,
+        # pgvector, Pinecone) already gives you for free.
+        self._real_client = client is None
         if client is not None:
             self._client = client
         else:
@@ -62,11 +71,12 @@ class WeaviateVectorStore:
     def _ensure_collection(self) -> Any:
         if not self._collection_ready:
             if not self._client.collections.exists(self.collection_name):
-                from weaviate.classes.config import Configure
+                vectorizer_config = None
+                if self._real_client:
+                    from weaviate.classes.config import Configure
 
-                self._client.collections.create(
-                    self.collection_name, vectorizer_config=Configure.Vectorizer.none()
-                )
+                    vectorizer_config = Configure.Vectorizer.none()
+                self._client.collections.create(self.collection_name, vectorizer_config=vectorizer_config)
             self._collection_ready = True
         return self._client.collections.get(self.collection_name)
 
@@ -85,10 +95,14 @@ class WeaviateVectorStore:
     def query(self, embedding: list[float], k: int = 5) -> list[ScoredChunk]:
         if not self._collection_ready:
             return []
-        from weaviate.classes.query import MetadataQuery
+        return_metadata = None
+        if self._real_client:
+            from weaviate.classes.query import MetadataQuery
+
+            return_metadata = MetadataQuery(distance=True)
 
         collection = self._client.collections.get(self.collection_name)
-        result = collection.query.near_vector(near_vector=embedding, limit=k, return_metadata=MetadataQuery(distance=True))
+        result = collection.query.near_vector(near_vector=embedding, limit=k, return_metadata=return_metadata)
         return [
             ScoredChunk(chunk=self._to_chunk(obj.properties), score=1.0 - (obj.metadata.distance or 0.0))
             for obj in result.objects

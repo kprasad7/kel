@@ -7,8 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `Memory` now recalls prior turns automatically: if `working` isn't given explicitly, working memory is seeded from `episodic`'s existing transcript for `session_id`. Pass the same durable `episodic` store (e.g. `FileEpisodicStore`) and `session_id` across process restarts or per-interaction script reruns (Streamlit-style apps) and the conversation resumes instead of silently starting over. `InMemoryEpisodicStore` (the default) doesn't outlive the process, so default behavior is unchanged unless a durable store is supplied.
+
 ### Changed
 - Replaced the CLI's ASCII banner with a cleaner, properly-aligned "KEL" rendering (pure ASCII, verified safe under `cp1252` and other narrow console encodings).
+
+### Fixed
+- `python -m kel.sdk.cli` silently did nothing (exit 0, no output) regardless of subcommand — `cli.py` had no `if __name__ == "__main__":` guard, so `main()`/`run_cli()` were defined but never invoked. Only the installed `kel` console-script actually worked. Fixed; `python -m kel.sdk.cli` now runs correctly (a separate, harmless `RuntimeWarning` about the module being imported twice remains — an inherent quirk of `python -m` combined with `kel.sdk`'s eager re-export of `cli`, not a functional issue).
+- `make_summarization_eviction()`'s fallback discarded the summary message first when `[summary, *recent]` was still over budget, because `sliding_window_eviction` evicts from the front of the list and the summary sat at the front — silently defeating the point of summarizing under a tight budget. Now protects the summary and evicts `recent`'s oldest messages first, falling back to plain sliding-window eviction only if the summary alone doesn't fit.
+- `WeaviateVectorStore.query()`/`_ensure_collection()` unconditionally imported `weaviate.classes.query.MetadataQuery`/`weaviate.classes.config.Configure`, so even a fully injected fake client still required the real `weaviate-client` package installed — unlike Chroma/pgvector/Pinecone, which are fully fakeable via dependency injection with no vendor package installed at all. Now only constructs those real vendor types when talking to a real client (verified end-to-end with `weaviate-client` actually uninstalled).
 
 ### Performance
 - `ContextWindow.tokens_used` (i.e. `Memory.working`, which every `Agent.run()` turn appends to) recomputed the token count over the *entire* message history on every single `add`/`extend` call — an n-turn session cost O(n^2) instead of O(n). Now maintains a running total incrementally, recomputing in full only on the (already rare) eviction-overflow path.

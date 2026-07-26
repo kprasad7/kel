@@ -130,3 +130,20 @@ def test_query_before_any_upsert_returns_empty():
     store = WeaviateVectorStore("TestCollection", client=FakeClient())
     assert store.query([1.0, 0.0]) == []
     assert store.get("x") is None
+
+
+def test_injected_client_never_needs_real_weaviate_classes():
+    # regression: query()/_ensure_collection() used to unconditionally
+    # import weaviate.classes.query.MetadataQuery / weaviate.classes.
+    # config.Configure, so even a fully injected fake client still
+    # required the real weaviate-client package installed just to build
+    # a query — unlike Chroma/pgvector/Pinecone, which never need that.
+    # Proven end-to-end (weaviate-client actually uninstalled) in this
+    # session; this just locks in the flag that makes it true.
+    from kel.retrieval.types import Chunk
+
+    store = WeaviateVectorStore("TestCollection", client=FakeClient())
+    assert store._real_client is False
+
+    store.upsert([Chunk(id="doc1", text="hello", embedding=[1.0, 0.0])])
+    store.query([1.0, 0.0])  # must not raise ImportError even without weaviate-client installed

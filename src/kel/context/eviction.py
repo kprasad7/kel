@@ -41,9 +41,27 @@ def make_summarization_eviction(
             return sliding_window_eviction(messages, max_tokens)
         to_summarize, recent = messages[:-keep_recent], messages[-keep_recent:]
         summary_message = summarize(to_summarize)
-        result = [summary_message, *recent]
-        if estimate_total_tokens(result) > max_tokens:
-            return sliding_window_eviction(result, max_tokens)
-        return result
+        summary_tokens = estimate_message_tokens(summary_message)
+
+        if summary_tokens >= max_tokens:
+            # the summary alone doesn't fit; no way to protect it, so fall
+            # back to plain sliding-window eviction over everything
+            return sliding_window_eviction([summary_message, *recent], max_tokens)
+
+        # Protect the summary and trim `recent`'s oldest messages first
+        # instead of handing [summary, *recent] to sliding_window_eviction
+        # — that function evicts from the *front* of the list, and the
+        # summary sits at the front, so it would be the very first thing
+        # dropped. Under a tight budget that silently throws away the
+        # summary itself (the whole point of summarizing) and leaves just
+        # the last raw message. Evicting from `recent` instead keeps the
+        # summarized older context intact for as long as any budget for
+        # recent messages remains.
+        kept_recent: deque[Message] = deque(recent)
+        total = summary_tokens + estimate_total_tokens(recent)
+        while total > max_tokens and kept_recent:
+            removed = kept_recent.popleft()
+            total -= estimate_message_tokens(removed)
+        return [summary_message, *kept_recent]
 
     return policy

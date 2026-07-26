@@ -1,3 +1,5 @@
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -20,6 +22,20 @@ def _fake_agent_builder_factory(response_text: str):
         return Agent("cli-agent", model)
 
     return builder
+
+
+def test_python_dash_m_kel_sdk_cli_actually_runs():
+    # regression: cli.py previously had no `if __name__ == "__main__":`
+    # guard, so `python -m kel.sdk.cli` silently defined main()/run_cli()
+    # and exited 0 with no output, regardless of subcommand.
+    result = subprocess.run(
+        [sys.executable, "-m", "kel.sdk.cli", "--version"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0
+    assert __version__ in result.stdout
 
 
 def test_bare_invocation_shows_banner_and_help(capsys):

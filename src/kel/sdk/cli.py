@@ -89,3 +89,7 @@ def main(argv: list[str] | None = None, *, agent_builder: AgentBuilder = build_a
 
 def run_cli() -> None:
     sys.exit(main())
+
+
+if __name__ == "__main__":
+    run_cli()

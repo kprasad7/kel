@@ -109,3 +109,45 @@ def test_memory_facade_remember_turn_updates_working_and_episodic():
 
     assert [m.text for m in memory.working.messages] == ["hello", "hi"]
     assert [m.text for m in memory.episodic.transcript("s1")] == ["hello", "hi"]
+
+
+def test_memory_recalls_prior_turns_when_reconstructed_with_the_same_session():
+    # a Memory (or an Agent built on one) reconstructed fresh — e.g. every
+    # rerun of a Streamlit-style script, or a new process — should resume
+    # a session instead of silently starting over, as long as the caller
+    # passes the same durable episodic store and session_id back in.
+    with tempfile.TemporaryDirectory() as tmp:
+        episodic = FileEpisodicStore(tmp)
+
+        first = Memory(session_id="s1", episodic=episodic)
+        first.remember_turn(Message.user("what's the capital of France?"))
+        first.remember_turn(Message.assistant("Paris"))
+
+        # simulates a fresh process/script rerun: brand new Memory object,
+        # same durable store + session_id
+        second = Memory(session_id="s1", episodic=episodic)
+
+        assert [m.text for m in second.working.messages] == ["what's the capital of France?", "Paris"]
+
+
+def test_memory_starts_fresh_for_a_new_session_id_even_with_a_shared_store():
+    with tempfile.TemporaryDirectory() as tmp:
+        episodic = FileEpisodicStore(tmp)
+        first = Memory(session_id="s1", episodic=episodic)
+        first.remember_turn(Message.user("hello"))
+
+        other_session = Memory(session_id="s2", episodic=episodic)
+
+        assert other_session.working.messages == []
+
+
+def test_memory_does_not_recall_across_instances_with_the_default_in_memory_store():
+    # InMemoryEpisodicStore doesn't outlive the process — a fresh Memory()
+    # with no episodic store passed in has nothing to recall from,
+    # matching the pre-existing default behavior.
+    first = Memory(session_id="s1")
+    first.remember_turn(Message.user("hello"))
+
+    second = Memory(session_id="s1")
+
+    assert second.working.messages == []
