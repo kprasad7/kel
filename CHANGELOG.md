@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Performance
+- `ContextWindow.tokens_used` (i.e. `Memory.working`, which every `Agent.run()` turn appends to) recomputed the token count over the *entire* message history on every single `add`/`extend` call — an n-turn session cost O(n^2) instead of O(n). Now maintains a running total incrementally, recomputing in full only on the (already rare) eviction-overflow path.
+- `sliding_window_eviction` recomputed the total from scratch on every popped message and used `list.pop(0)` (itself O(n)) — evicting k of n messages cost O(k*n). Switched to a `deque` (O(1) pop-from-front) with a running total decremented per pop, making eviction O(n) total regardless of how many messages are dropped.
+
 ### Fixed
 - `ChromaVectorStore` never set an explicit distance metric, so Chroma silently defaulted to `l2` (squared Euclidean) instead of cosine — unlike Qdrant, Pinecone, and pgvector, which all use or require cosine. `query()`'s `score = 1.0 - distance` produced wrong, unbounded values under that default. Now creates the collection with `metadata={"hnsw:space": "cosine"}` explicitly, matching every other `VectorStore` adapter's score semantics.
 

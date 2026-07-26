@@ -4,20 +4,28 @@ whenever an append pushes it over max_tokens (DESIGN.md 3.2)."""
 
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Callable
 
-from kel.context.tokens import estimate_total_tokens
+from kel.context.tokens import estimate_message_tokens, estimate_total_tokens
 from kel.models.types import Message
 
 EvictionPolicy = Callable[[list["Message"], int], list["Message"]]
 
 
 def sliding_window_eviction(messages: list[Message], max_tokens: int) -> list[Message]:
-    """Drop oldest messages until under budget or only one message remains."""
-    kept = list(messages)
-    while estimate_total_tokens(kept) > max_tokens and len(kept) > 1:
-        kept.pop(0)
-    return kept
+    """Drop oldest messages until under budget or only one message remains.
+
+    Uses a deque (O(1) pop-from-front, vs. O(n) for `list.pop(0)`) and
+    decrements a running token total instead of resumming the whole list
+    on every pop — evicting k of n messages is O(n) total, not O(k*n).
+    """
+    kept = deque(messages)
+    total = estimate_total_tokens(messages)
+    while total > max_tokens and len(kept) > 1:
+        removed = kept.popleft()
+        total -= estimate_message_tokens(removed)
+    return list(kept)
 
 
 def make_summarization_eviction(
