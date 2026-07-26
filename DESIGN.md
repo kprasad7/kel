@@ -171,6 +171,30 @@ When a step in a multi-agent loop fails — tool error, malformed/invalid output
 - **Learns over time**: every (failure → diagnosis → fix → outcome) record feeds back into the brain's fast-tier router training data (3.14), so recurring failure patterns get routed around preemptively in future runs instead of being diagnosed fresh every time.
 - Fully traced like everything else: a healed run shows the failure, the diagnosis, and the fix in the trace timeline — self-healing must stay debuggable, not paper over what happened.
 
+### 3.16 Media Generation Gateway (`kel.media`)
+Not in the original subsystem list above — added once image/video/audio-generation platforms (fal.ai, Replicate, and similar) converged on the same shape 3.1's Model Gateway already assumes for chat models: a named model reference, a dict of inputs, and a result back. Same "small interface, swappable vendor" principle from §2 applied to a different modality, not a new architectural pattern.
+
+- **One generic adapter class per vendor, not one per media type.** fal.ai and Replicate both expose image, video, text-to-speech, and (fal) lipsync generation through the same request shape on their own platform — so `FalMediaModel`/`ReplicateMediaModel` each cover every media type for their vendor, rather than kel hardcoding a bespoke `ImageModel`/`VideoModel`/`AudioModel` class per type per vendor. `get_image_model`/`get_video_model`/`get_audio_model`/`get_lipsync_model` are thin, discoverable entry points that all resolve through the same `"provider:model"` registry §3.1 already established.
+- **Async is not optional for this modality.** Video generation can take minutes — the sync-request-response model that works fine for a chat completion doesn't for a video render. Every provider here exposes both a blocking `generate()`/`agenerate()` and a submit-then-poll queue path (`submit()` → a job handle with `.status()`/`.result()`/`.cancel()`), mirroring the provider's own recommended pattern for slow jobs.
+- **Cost governance extends here too, not just to chat models.** These platforms have no fixed per-token pricing table (§3.8's `estimate_cost_usd` assumption doesn't hold) and a single expensive call is a real, commonly reported failure mode ("surprise bill" complaints across the whole category, not one vendor). `budget=`/`cost_usd=`/`cost_estimator=` extend §3.8's `BudgetTracker` to this modality — `cost_estimator` specifically reserves an estimated cost *before* the network call, so a call that would exceed budget never actually runs, not just gets flagged after the money's spent.
+- **Vendor exceptions translate into the same error hierarchy §3.1 already established** (`ProviderError`/`AuthenticationError`/`RateLimitError`) — best-effort, from an HTTP status code on the raised exception, since (unlike the core chat-model adapters) these vendors' exact exception class hierarchies aren't confidently known without a live integration.
+- **Ships as an optional extra per vendor** (`pykel[fal]`, `pykel[replicate]`), same as every other optional provider/vector-store dependency — core `kel` has no hard dependency on either.
+
+Minimal usage (the full, verified example set lives in [USAGE.md](USAGE.md), §16):
+
+```python
+from kel.media import get_image_model, get_video_model
+
+image_model = get_image_model("fal:fal-ai/flux/schnell", api_key="...")
+result = image_model.generate(prompt="a lighthouse at sunset")
+result.urls   # every URL found in the vendor's response
+
+# a different vendor, same shape:
+video_model = get_video_model("replicate:minimax/video-01", api_key="...")
+job = video_model.submit(prompt="a drone shot flying over mountains")  # slow job -> queue, don't block
+result = job.result()
+```
+
 ## 4. Suggested build order
 
 1. **Model Gateway** — smallest surface, immediately useful standalone, everything else depends on it.
