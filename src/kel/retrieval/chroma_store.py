@@ -12,6 +12,14 @@ server has auth enabled — many in-cluster deployments don't).
 
 Chroma accepts arbitrary string IDs natively — no UUID-mapping workaround
 needed here, unlike Qdrant/Weaviate.
+
+**Distance metric is pinned to cosine explicitly.** Chroma's own default
+(`hnsw:space`) is `l2` (squared Euclidean), not cosine — unlike Qdrant
+(`Distance.COSINE`), Pinecone (`metric="cosine"`), and pgvector (`<=>`),
+which all default to or require cosine here. Left unset, `query()`'s
+`score = 1.0 - distance` would silently produce wrong, unbounded score
+values under the default `l2` space instead of a real cosine similarity —
+inconsistent with every other `VectorStore` adapter's score semantics.
 """
 
 from __future__ import annotations
@@ -50,7 +58,9 @@ class ChromaVectorStore:
                 self._client = chromadb.PersistentClient(path=path)
             else:
                 self._client = chromadb.Client()
-        self._collection = self._client.get_or_create_collection(collection_name)
+        self._collection = self._client.get_or_create_collection(
+            collection_name, metadata={"hnsw:space": "cosine"}
+        )
 
     def upsert(self, chunks: list[Chunk]) -> None:
         embedded = [c for c in chunks if c.embedding is not None]

@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- `ChromaVectorStore` never set an explicit distance metric, so Chroma silently defaulted to `l2` (squared Euclidean) instead of cosine — unlike Qdrant, Pinecone, and pgvector, which all use or require cosine. `query()`'s `score = 1.0 - distance` produced wrong, unbounded values under that default. Now creates the collection with `metadata={"hnsw:space": "cosine"}` explicitly, matching every other `VectorStore` adapter's score semantics.
+
+## [1.0.2] - 2026-07-26
+
+### Fixed
 - `QdrantVectorStore.query()` called `search()`, which qdrant-client removed in favor of `query_points()` — fixed to use `query_points()`, matching the currently supported client API.
 - `Agent` never forwarded `max_tokens`/`temperature` to the model on any of `run`/`arun`/`run_stream`/`arun_stream`, silently locking every agent to each provider adapter's hardcoded default (e.g. 1024 tokens). Added `max_tokens`/`temperature` constructor params on `Agent`, forwarded to every generation call only when explicitly set (so provider defaults are preserved when unset).
 - `Agent` stored a model's response into shared memory unconditionally, even when a turn came back with no text and no tool calls (e.g. truncated by a provider-side error). Since `Agent.memory` persists across every `run()` call, that empty turn corrupted every later question in the session. Added `EmptyModelResponseError` (`kel.agents.errors`), raised before the malformed turn is stored, on `run`/`arun`/`run_stream`/`arun_stream`.
@@ -46,7 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.md`-based agent specs, CLI (`run`/`eval`/`trace`), and `serve()` HTTP runtime.
 - DevSecOps pipeline: Trivy, pip-audit, and Bandit scanning; Dependabot.
 
-[Unreleased]: https://github.com/kprasad7/kel/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/kprasad7/kel/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/kprasad7/kel/releases/tag/v1.0.2
 [1.0.1]: https://github.com/kprasad7/kel/releases/tag/v1.0.1
 [1.0.0]: https://github.com/kprasad7/kel/releases/tag/v1.0.0
 [0.1.0]: https://github.com/kprasad7/kel/releases/tag/v0.1.0

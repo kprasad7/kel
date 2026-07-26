@@ -43,8 +43,10 @@ class FakeCollection:
 class FakeChromaClient:
     def __init__(self):
         self._collections: dict[str, FakeCollection] = {}
+        self.last_metadata: dict | None = None
 
-    def get_or_create_collection(self, name):
+    def get_or_create_collection(self, name, metadata=None):
+        self.last_metadata = metadata
         return self._collections.setdefault(name, FakeCollection())
 
 
@@ -88,3 +90,13 @@ def test_keyword_query_matches_via_where_document_contains():
 def test_query_with_no_data_returns_empty():
     store = ChromaVectorStore("test-collection", client=FakeChromaClient())
     assert store.query([1.0, 0.0]) == []
+
+
+def test_collection_is_created_with_cosine_distance_explicitly():
+    # Chroma defaults to l2 (squared Euclidean) distance unless told
+    # otherwise, which would make query()'s `1.0 - distance` score
+    # nonsensical and inconsistent with every other VectorStore adapter's
+    # cosine-similarity scores (Qdrant, Pinecone, pgvector).
+    client = FakeChromaClient()
+    ChromaVectorStore("test-collection", client=client)
+    assert client.last_metadata == {"hnsw:space": "cosine"}
