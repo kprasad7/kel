@@ -180,19 +180,59 @@ Not in the original subsystem list above — added once image/video/audio-genera
 - **Vendor exceptions translate into the same error hierarchy §3.1 already established** (`ProviderError`/`AuthenticationError`/`RateLimitError`) — best-effort, from an HTTP status code on the raised exception, since (unlike the core chat-model adapters) these vendors' exact exception class hierarchies aren't confidently known without a live integration.
 - **Ships as an optional extra per vendor** (`pykel[fal]`, `pykel[replicate]`), same as every other optional provider/vector-store dependency — core `kel` has no hard dependency on either.
 
-Minimal usage (the full, verified example set lives in [USAGE.md](USAGE.md), §16):
+Workable examples (each checked against the real implementation — the
+full, verified set lives in [USAGE.md](USAGE.md), §16):
 
 ```python
-from kel.media import get_image_model, get_video_model
+from kel.media import get_image_model, get_video_model, get_lipsync_model
 
+# Image generation on fal — "scale" (resolution/aspect ratio, how many
+# variants) is just an argument the specific endpoint defines, not
+# something kel hardcodes:
 image_model = get_image_model("fal:fal-ai/flux/schnell", api_key="...")
-result = image_model.generate(prompt="a lighthouse at sunset")
-result.urls   # every URL found in the vendor's response
+result = image_model.generate(prompt="a neon cyberpunk alley", image_size="portrait_16_9", num_images=2)
+result.urls   # every URL found in the vendor's response, e.g. 2 image URLs
 
-# a different vendor, same shape:
-video_model = get_video_model("replicate:minimax/video-01", api_key="...")
-job = video_model.submit(prompt="a drone shot flying over mountains")  # slow job -> queue, don't block
-result = job.result()
+# Video generation on fal — same class, a different endpoint's arguments
+# (duration, aspect ratio) instead of a resolution/count:
+video_model = get_video_model("fal:fal-ai/kling-video/v1.6/standard/text-to-video", api_key="...")
+result = video_model.generate(prompt="a drone shot flying over mountains", duration=5, aspect_ratio="16:9")
+result.urls[0]   # the generated video's URL
+
+# Video generation on a *different* vendor (Replicate), same call shape —
+# submitted via the queue instead of blocking, since video can take minutes:
+replicate_video_model = get_video_model("replicate:minimax/video-01", api_key="...")
+job = replicate_video_model.submit(prompt="a drone shot flying over mountains")
+result = job.result()   # blocks only here, once you actually need the output
+
+# Lipsync on fal — video + audio in, a synced video out; no new class,
+# just a different endpoint's argument names:
+lipsync_model = get_lipsync_model("fal:fal-ai/sync-lipsync", api_key="...")
+result = lipsync_model.generate(video_url="https://.../face.mp4", audio_url="https://.../speech.wav")
+```
+
+Guarding an expensive video call against a budget, and handling a
+rate-limited response — the two problems §3.8 (Budget) and §3.1's error
+hierarchy already solve for chat models, extended to this modality:
+
+```python
+from kel.budget import Budget, BudgetTracker
+from kel.models import RateLimitError
+
+tracker = BudgetTracker(Budget(max_cost_usd=2.0))
+video_model = get_video_model(
+    "fal:fal-ai/kling-video/v1.6/standard/text-to-video",
+    api_key="...",
+    budget=tracker,
+    cost_estimator=lambda arguments: arguments.get("duration", 5) * 0.5,   # reserved *before* the call
+)
+
+try:
+    result = video_model.generate(prompt="a short clip", duration=3)
+except RateLimitError:
+    ...   # fal returned 429 — safe to back off and retry
+# a duration long enough to exceed tracker's max_cost_usd raises
+# BudgetExceededError immediately, before the network call ever happens
 ```
 
 ## 4. Suggested build order
