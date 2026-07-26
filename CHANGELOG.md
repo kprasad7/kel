@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-07-26
+
+### Added
+- `kel.media`'s `FalMediaModel` now translates fal.ai errors into kel's own `ProviderError`/`AuthenticationError`/`RateLimitError` hierarchy (best-effort, from an HTTP status code on the raised exception) instead of leaking a raw vendor exception — the same translation every chat-model provider adapter already does.
+- `FalMediaModel.submit()`/`FalJobHandle` (`kel.media`): the queue-based submit-then-poll flow fal's own docs recommend for slow generations (video especially can take minutes) instead of blocking on `generate()`.
+- `FalMediaModel(..., budget=, cost_usd=)`: meters media generation cost against a `kel.budget.BudgetTracker`, the same way `kel.get_model(budget=...)` meters chat spend — `cost_usd` can be a fixed float or a function computing cost from the actual response (e.g. reported duration), since fal has no fixed per-token pricing table the way chat models do. Directly addresses the "surprise bill" pattern real fal.ai users report.
+
 ## [1.7.0] - 2026-07-26
 
 ### Added
@@ -116,7 +123,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.md`-based agent specs, CLI (`run`/`eval`/`trace`), and `serve()` HTTP runtime.
 - DevSecOps pipeline: Trivy, pip-audit, and Bandit scanning; Dependabot.
 
-[Unreleased]: https://github.com/kprasad7/kel/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/kprasad7/kel/compare/v1.7.1...HEAD
+[1.7.1]: https://github.com/kprasad7/kel/releases/tag/v1.7.1
 [1.7.0]: https://github.com/kprasad7/kel/releases/tag/v1.7.0
 [1.6.0]: https://github.com/kprasad7/kel/releases/tag/v1.6.0
 [1.5.1]: https://github.com/kprasad7/kel/releases/tag/v1.5.1

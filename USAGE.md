@@ -1122,6 +1122,63 @@ result = stt.transcribe(microphone_audio_bytes)
 result.text
 ```
 
+**Vendor errors become kel's own error hierarchy**, the same
+`AuthenticationError`/`RateLimitError`/`ProviderError` classes chat
+models raise (§1) — no fal-specific exception type to catch:
+
+```python
+from kel.models import AuthenticationError, RateLimitError, ProviderError
+
+try:
+    image_model.generate(prompt="a lighthouse at sunset")
+except RateLimitError:
+    ...   # fal returned 429 — safe to back off and retry
+except AuthenticationError:
+    ...   # bad/missing fal API key
+except ProviderError:
+    ...   # any other fal-side failure
+```
+
+**Long-running generations (video especially can take minutes) — submit
+and poll instead of blocking**, the queue-based flow fal's own docs
+recommend over a plain blocking call:
+
+```python
+job = video_model.submit(prompt="a drone shot flying over mountains", duration=5)
+job.status()          # poll however often makes sense for your UI
+result = job.result()  # blocks until fal's queue reports the job done
+job.cancel()            # if you want to give up on it early
+```
+
+**Cost governance for media spend** — fal has no fixed per-token pricing
+table the way chat models do (cost varies by model, resolution, and
+duration), so `estimate_cost_usd` (§3) doesn't apply here. Pass `budget=`
+a `BudgetTracker` and `cost_usd=` (a fixed float, or a function computing
+cost from the actual result) to meter it the same way chat calls are
+metered — this is the direct fix for the "surprise bill" complaints
+real fal.ai users report (a single vibe-coded video app running up
+unexpected charges):
+
+```python
+from kel.budget import Budget, BudgetTracker
+from kel.media import get_video_model
+
+tracker = BudgetTracker(Budget(max_cost_usd=5.0))
+
+# fixed cost per call:
+video_model = get_video_model("fal:fal-ai/kling-video/v1.6/standard/text-to-video", api_key="...", budget=tracker, cost_usd=0.50)
+
+# or a cost computed from what the endpoint actually reports back:
+video_model = get_video_model(
+    "fal:fal-ai/kling-video/v1.6/standard/text-to-video",
+    api_key="...",
+    budget=tracker,
+    cost_usd=lambda result: result.raw.get("duration_seconds", 0) * 0.10,
+)
+
+video_model.generate(prompt="a cat flying")   # raises BudgetExceededError once tracker's max_cost_usd trips
+```
+
 Not exercised against a live fal.ai API key — implemented against fal's
 documented `fal_client` SDK shape and verified against injected fakes in
 the test suite, same honesty as the other provider adapters' status in

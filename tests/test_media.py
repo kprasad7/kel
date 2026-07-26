@@ -1,6 +1,8 @@
 import pytest
 
+from kel.budget import Budget, BudgetExceededError, BudgetTracker
 from kel.media import (
+    FalJobHandle,
     FalMediaModel,
     FalSTTProvider,
     FalTTSProvider,
@@ -10,6 +12,7 @@ from kel.media import (
 )
 from kel.media.registry import _PROVIDERS, register_media_provider
 from kel.media.types import MediaResult
+from kel.models.errors import AuthenticationError, ProviderError, RateLimitError
 
 
 class FakeFalClient:
@@ -154,3 +157,128 @@ def test_fal_stt_provider_uploads_then_transcribes():
     assert client.calls == [("fal-ai/whisper", {"audio_url": "https://fal.example/uploaded.wav"})]
     assert result.text == "hello world"
     assert result.is_final is True
+
+
+class _StatusCodeError(Exception):
+    def __init__(self, message, status_code):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class FakeErrorClient:
+    def __init__(self, exc):
+        self._exc = exc
+
+    def run(self, endpoint, arguments):
+        raise self._exc
+
+
+def test_generate_translates_a_401_into_authentication_error():
+    model = FalMediaModel("fal-ai/flux/schnell", client=FakeErrorClient(_StatusCodeError("bad key", 401)))
+    with pytest.raises(AuthenticationError):
+        model.generate(prompt="hi")
+
+
+def test_generate_translates_a_429_into_rate_limit_error():
+    model = FalMediaModel("fal-ai/flux/schnell", client=FakeErrorClient(_StatusCodeError("slow down", 429)))
+    with pytest.raises(RateLimitError):
+        model.generate(prompt="hi")
+
+
+def test_generate_translates_an_unknown_error_into_provider_error():
+    model = FalMediaModel("fal-ai/flux/schnell", client=FakeErrorClient(RuntimeError("boom")))
+    with pytest.raises(ProviderError):
+        model.generate(prompt="hi")
+
+
+def test_generate_charges_a_fixed_cost_against_a_budget_tracker():
+    client = FakeFalClient({"images": [{"url": "https://fal.example/out.png"}]})
+    tracker = BudgetTracker(Budget(max_cost_usd=10.0))
+    model = FalMediaModel("fal-ai/flux/schnell", client=client, budget=tracker, cost_usd=0.05)
+
+    model.generate(prompt="a cat")
+    model.generate(prompt="a dog")
+
+    assert tracker.cost_usd_used == pytest.approx(0.10)
+
+
+def test_generate_charges_a_cost_computed_from_the_result():
+    client = FakeFalClient({"images": [{"url": "https://fal.example/out.png"}], "duration_seconds": 4})
+    tracker = BudgetTracker(Budget(max_cost_usd=10.0))
+    model = FalMediaModel(
+        "fal-ai/kling-video",
+        client=client,
+        budget=tracker,
+        cost_usd=lambda result: result.raw["duration_seconds"] * 0.5,
+    )
+
+    model.generate(prompt="a cat flying")
+
+    assert tracker.cost_usd_used == pytest.approx(2.0)
+
+
+def test_generate_raises_budget_exceeded_once_the_cap_trips():
+    client = FakeFalClient({"images": [{"url": "https://fal.example/out.png"}]})
+    tracker = BudgetTracker(Budget(max_cost_usd=0.5))
+    model = FalMediaModel("fal-ai/flux/schnell", client=client, budget=tracker, cost_usd=1.0)
+
+    with pytest.raises(BudgetExceededError):
+        model.generate(prompt="too expensive")
+
+
+class FakeJobHandle:
+    def __init__(self, response):
+        self._response = response
+        self.cancelled = False
+
+    def status(self):
+        return "COMPLETED"
+
+    def get(self):
+        return self._response
+
+    def cancel(self):
+        self.cancelled = True
+
+
+class FakeQueueClient:
+    def __init__(self, handle):
+        self._handle = handle
+        self.calls = []
+
+    def submit(self, endpoint, arguments):
+        self.calls.append((endpoint, arguments))
+        return self._handle
+
+
+def test_submit_returns_a_job_handle_that_polls_for_the_result():
+    handle = FakeJobHandle({"video": {"url": "https://fal.example/out.mp4"}})
+    client = FakeQueueClient(handle)
+    model = FalMediaModel("fal-ai/kling-video", client=client)
+
+    job = model.submit(prompt="a slow video")
+
+    assert isinstance(job, FalJobHandle)
+    assert client.calls == [("fal-ai/kling-video", {"prompt": "a slow video"})]
+    assert job.status() == "COMPLETED"
+    result = job.result()
+    assert result.urls == ["https://fal.example/out.mp4"]
+
+
+def test_job_handle_cancel_delegates_to_the_raw_handle():
+    handle = FakeJobHandle({})
+    job = FalJobHandle(handle)
+
+    job.cancel()
+
+    assert handle.cancelled is True
+
+
+def test_job_handle_result_translates_errors_too():
+    class FailingHandle:
+        def get(self):
+            raise _StatusCodeError("gone", 404)
+
+    job = FalJobHandle(FailingHandle())
+    with pytest.raises(ProviderError):
+        job.result()

@@ -40,23 +40,25 @@ def _get_media_model(spec: str, **kwargs: Any) -> Any:
     return factory(model_ref, **kwargs)
 
 
-def get_image_model(spec: str, *, api_key: str | None = None, client: Any = None) -> Any:
+def get_image_model(spec: str, *, api_key: str | None = None, client: Any = None, **kwargs: Any) -> Any:
     """Example: `get_image_model("fal:fal-ai/flux/schnell")`. Image
     "scale" (resolution/aspect ratio) is just an argument the specific
-    endpoint defines — pass it to `.generate(**arguments)`, not here."""
-    return _get_media_model(spec, api_key=api_key, client=client)
+    endpoint defines — pass it to `.generate(**arguments)`, not here.
+    Extra `**kwargs` (e.g. `budget=`/`cost_usd=`) are forwarded to the
+    resolved provider's constructor — see `FalMediaModel` for fal's."""
+    return _get_media_model(spec, api_key=api_key, client=client, **kwargs)
 
 
-def get_video_model(spec: str, *, api_key: str | None = None, client: Any = None) -> Any:
+def get_video_model(spec: str, *, api_key: str | None = None, client: Any = None, **kwargs: Any) -> Any:
     """Example: `get_video_model("fal:fal-ai/kling-video/v1.6/standard/text-to-video")`."""
-    return _get_media_model(spec, api_key=api_key, client=client)
+    return _get_media_model(spec, api_key=api_key, client=client, **kwargs)
 
 
-def get_audio_model(spec: str, *, api_key: str | None = None, client: Any = None) -> Any:
+def get_audio_model(spec: str, *, api_key: str | None = None, client: Any = None, **kwargs: Any) -> Any:
     """Example: `get_audio_model("fal:fal-ai/elevenlabs/tts/turbo-v2.5")`."""
-    return _get_media_model(spec, api_key=api_key, client=client)
+    return _get_media_model(spec, api_key=api_key, client=client, **kwargs)
 
 
-def get_lipsync_model(spec: str, *, api_key: str | None = None, client: Any = None) -> Any:
+def get_lipsync_model(spec: str, *, api_key: str | None = None, client: Any = None, **kwargs: Any) -> Any:
     """Example: `get_lipsync_model("fal:fal-ai/sync-lipsync")`."""
-    return _get_media_model(spec, api_key=api_key, client=client)
+    return _get_media_model(spec, api_key=api_key, client=client, **kwargs)

@@ -1,4 +1,4 @@
-from kel.media.fal import FalMediaModel
+from kel.media.fal import FalJobHandle, FalMediaModel
 from kel.media.realtime_bridge import FalSTTProvider, FalTTSProvider
 from kel.media.registry import (
     get_audio_model,
@@ -10,6 +10,7 @@ from kel.media.registry import (
 from kel.media.types import MediaResult
 
 __all__ = [
+    "FalJobHandle",
     "FalMediaModel",
     "FalSTTProvider",
     "FalTTSProvider",

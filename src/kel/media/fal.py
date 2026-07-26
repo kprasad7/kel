@@ -13,14 +13,40 @@ specific endpoint's own docs specify as `**arguments` to `generate()`.
 
 Same dependency-injection shape as every other adapter in kel: pass
 `client=` (anything exposing `.run(endpoint, arguments=...)` /
-`.run_async(...)`) to test against a fake instead of the real network.
+`.run_async(...)` / `.submit(...)`) to test against a fake instead of the
+real network.
+
+Three things real-world fal.ai usage (per fal's own docs and reported
+user experience) makes worth solving here rather than leaving to a bare
+`fal_client.run()` call:
+
+1. **Vendor exceptions aren't kel's own error hierarchy.** `generate()`/
+   `agenerate()` translate whatever the client raises into
+   `kel.models.errors.ProviderError`/`AuthenticationError`/`RateLimitError`
+   (best-effort, based on an HTTP status code if the exception carries
+   one — fal's own exception class names aren't hardcoded here, since
+   they aren't confidently known without a live integration test).
+2. **Video/long-running generations can take minutes, not seconds** —
+   fal's own docs recommend the queue (`submit`/poll or webhook) over a
+   blocking synchronous call for exactly this reason. `submit()` /
+   `asubmit()` expose that path instead of only the blocking `generate()`.
+3. **Surprise bills are a commonly reported complaint** (fal has no fixed
+   per-token pricing table the way chat models do — cost varies per
+   model, resolution, and duration). Pass `budget=` a
+   `kel.budget.BudgetTracker` and `cost_usd=` (a fixed float, or a
+   `Callable[[MediaResult], float]` for endpoints whose response tells you
+   the actual cost/duration) to meter media spend the same way
+   `kel.get_model(budget=...)` meters chat spend.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, Protocol
 
 from kel.media.types import MediaResult
+from kel.models.errors import AuthenticationError, ProviderError, RateLimitError
+from kel.models.types import Usage
 from kel.observability import get_tracer
 
 
@@ -43,26 +69,115 @@ def _import_fal_client() -> Any:
     return fal_client
 
 
+def _status_code_of(exc: Exception) -> int | None:
+    status = getattr(exc, "status_code", None)
+    if isinstance(status, int):
+        return status
+    response = getattr(exc, "response", None)
+    status = getattr(response, "status_code", None)
+    return status if isinstance(status, int) else None
+
+
+def _translate_error(exc: Exception, *, provider: str = "fal") -> ProviderError:
+    status = _status_code_of(exc)
+    if status in (401, 403):
+        return AuthenticationError(str(exc), provider=provider)
+    if status == 429:
+        return RateLimitError(str(exc), provider=provider)
+    return ProviderError(str(exc), provider=provider, retryable=status in (500, 502, 503, 504) if status else False)
+
+
+class FalJobHandle:
+    """A submitted, not-necessarily-complete fal.ai job — the queue-based
+    flow fal's own docs recommend for slow generations (video especially:
+    it can take minutes, well past what's reasonable to block a request
+    thread on). Wraps whatever handle object `submit()` returned, from
+    either the injected fake client or the real `fal_client` SDK.
+
+    `result_method` defaults to `"get"` (fal_client's documented queue
+    handle shape) — override it if a specific fal-client version names
+    it differently."""
+
+    def __init__(self, raw_handle: Any, *, result_method: str = "get"):
+        self._raw = raw_handle
+        self._result_method = result_method
+
+    def status(self) -> Any:
+        return self._raw.status()
+
+    def result(self) -> MediaResult:
+        try:
+            raw = getattr(self._raw, self._result_method)()
+        except Exception as exc:
+            raise _translate_error(exc) from exc
+        return MediaResult(raw)
+
+    def cancel(self) -> None:
+        self._raw.cancel()
+
+
 class FalMediaModel:
     """One fal.ai model endpoint. `endpoint` is fal's own model path
     (e.g. `"fal-ai/flux/schnell"`) — kel does not maintain a list of
     known endpoints; fal hosts hundreds of first-party and community
     models and adds more independently of kel's release cycle."""
 
-    def __init__(self, endpoint: str, *, api_key: str | None = None, client: _FalClient | _AsyncFalClient | None = None):
+    def __init__(
+        self,
+        endpoint: str,
+        *,
+        api_key: str | None = None,
+        client: _FalClient | _AsyncFalClient | None = None,
+        budget: Any = None,
+        cost_usd: float | Callable[[MediaResult], float] | None = None,
+    ):
         self.endpoint = endpoint
         self._api_key = api_key
         self._client = client
+        self._budget = budget
+        self._cost_usd = cost_usd
 
     def generate(self, **arguments: Any) -> MediaResult:
         with get_tracer().span("media.generate", provider="fal", endpoint=self.endpoint):
-            raw = self._run_sync(arguments)
-        return MediaResult(raw)
+            try:
+                raw = self._run_sync(arguments)
+            except Exception as exc:
+                raise _translate_error(exc) from exc
+        result = MediaResult(raw)
+        self._charge_budget(result)
+        return result
 
     async def agenerate(self, **arguments: Any) -> MediaResult:
         with get_tracer().span("media.generate", provider="fal", endpoint=self.endpoint):
-            raw = await self._run_async(arguments)
-        return MediaResult(raw)
+            try:
+                raw = await self._run_async(arguments)
+            except Exception as exc:
+                raise _translate_error(exc) from exc
+        result = MediaResult(raw)
+        self._charge_budget(result)
+        return result
+
+    def submit(self, **arguments: Any) -> FalJobHandle:
+        """Submit without waiting — poll `.status()`/`.result()` later.
+        The path fal's own docs recommend for anything slow (video)
+        instead of blocking on `generate()`."""
+        with get_tracer().span("media.submit", provider="fal", endpoint=self.endpoint):
+            try:
+                if self._client is not None:
+                    raw_handle = self._client.submit(self.endpoint, arguments=arguments)  # type: ignore[union-attr]
+                else:
+                    fal_client = _import_fal_client()
+                    submitter = fal_client.SyncClient(key=self._api_key) if self._api_key else fal_client
+                    raw_handle = submitter.submit(self.endpoint, arguments=arguments)
+            except Exception as exc:
+                raise _translate_error(exc) from exc
+        return FalJobHandle(raw_handle)
+
+    def _charge_budget(self, result: MediaResult) -> None:
+        if self._budget is None:
+            return
+        cost = self._cost_usd(result) if callable(self._cost_usd) else (self._cost_usd or 0.0)
+        self._budget.record_usage(Usage(), cost_usd=cost)
 
     def _run_sync(self, arguments: dict[str, Any]) -> dict[str, Any]:
         if self._client is not None:
