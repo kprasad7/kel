@@ -1,4 +1,7 @@
-# kel — The Open-Source Agentic AI Framework for Python
+<img width="524" height="203" alt="image" src="https://github.com/user-attachments/assets/09687876-7d6e-412e-9a85-5e818a25812b" />
+
+
+# kel - The Open-Source Agentic AI Framework for Python
 
 **kel** is a production-grade **agentic AI framework for Python**: a unified multi-provider model gateway with built-in observability, cost governance, memory, retrieval (RAG), multi-agent orchestration, self-healing, and deterministic testing — engineered to close the gaps that **LLM orchestration frameworks** commonly leave open: opaque execution, no native cost control, no reproducible testing, and context/loop failures.
 
