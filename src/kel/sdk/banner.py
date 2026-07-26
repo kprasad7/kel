@@ -14,11 +14,11 @@ import sys
 from kel import __version__
 
 _ART = r"""
-  _              _
- | | _____ _ __ | |
- | |/ / _ \ '_ \| |
- |   <  __/ | | | |
- |_|\_\___|_| |_|_|
+_  _______ _
+| |/ / ____| |
+| ' /|  _| | |
+| . \| |___| |___
+|_|\_\_____|_____|
 """
 
 _TAGLINE = "Universal agentic OS for building production-grade AI agents"

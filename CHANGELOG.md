@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Replaced the CLI's ASCII banner with a cleaner, properly-aligned "KEL" rendering (pure ASCII, verified safe under `cp1252` and other narrow console encodings).
+
 ### Performance
 - `ContextWindow.tokens_used` (i.e. `Memory.working`, which every `Agent.run()` turn appends to) recomputed the token count over the *entire* message history on every single `add`/`extend` call — an n-turn session cost O(n^2) instead of O(n). Now maintains a running total incrementally, recomputing in full only on the (already rare) eviction-overflow path.
 - `sliding_window_eviction` recomputed the total from scratch on every popped message and used `list.pop(0)` (itself O(n)) — evicting k of n messages cost O(k*n). Switched to a `deque` (O(1) pop-from-front) with a running total decremented per pop, making eviction O(n) total regardless of how many messages are dropped.
