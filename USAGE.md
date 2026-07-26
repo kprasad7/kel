@@ -674,6 +674,24 @@ with serve_websocket(agent, port=8000) as server:
          # as the agent's run_stream() events arrive
 ```
 
+Or mount it as real ASGI routes on FastAPI (`pip install "pykel[fastapi]"`)
+— the same idea as LangChain's LangServe, but two routes you can add to
+any app you already have:
+
+```python
+from kel.sdk import create_fastapi_app, add_agent_routes
+
+app = create_fastapi_app(agent)          # a fresh app, ready for `uvicorn app:app`
+# or, onto an app you already have (your own auth/middleware/other routes):
+# add_agent_routes(your_app, agent, prefix="/agent")
+
+# POST /invoke {"input": "..."} -> {"text": ..., "stop_reason": ...}
+# POST /stream {"input": "..."} -> Server-Sent Events, one per run_stream() event
+```
+
+Uses `Agent.arun()`/`arun_stream()` (the async methods) under the hood,
+so a slow model call doesn't block the whole ASGI event loop.
+
 CLI:
 
 ```bash

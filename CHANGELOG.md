@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-07-26
+
+### Added
+- `create_fastapi_app()`/`add_agent_routes()` (`kel.sdk`, `pip install kel[fastapi]`): a FastAPI adapter for `Agent` — `POST /invoke` (JSON, matching `kel.sdk.serve`'s contract) and `POST /stream` (Server-Sent Events, one per `run_stream()` event), the "real ASGI deploy story" upgrade `kel.sdk.serve`'s own docstring flagged as reasonable future work, in the same spirit as LangChain's LangServe. Uses `Agent.arun()`/`arun_stream()` so a slow model call doesn't block the ASGI event loop. Verified end-to-end with FastAPI's real `TestClient`, including actual SSE streaming.
+
 ## [1.3.0] - 2026-07-26
 
 ### Added
@@ -89,7 +94,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.md`-based agent specs, CLI (`run`/`eval`/`trace`), and `serve()` HTTP runtime.
 - DevSecOps pipeline: Trivy, pip-audit, and Bandit scanning; Dependabot.
 
-[Unreleased]: https://github.com/kprasad7/kel/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/kprasad7/kel/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/kprasad7/kel/releases/tag/v1.4.0
 [1.3.0]: https://github.com/kprasad7/kel/releases/tag/v1.3.0
 [1.2.0]: https://github.com/kprasad7/kel/releases/tag/v1.2.0
 [1.1.0]: https://github.com/kprasad7/kel/releases/tag/v1.1.0

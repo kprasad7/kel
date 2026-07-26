@@ -26,25 +26,7 @@ import threading
 from typing import Any
 
 from kel.agents.agent import Agent
-from kel.agents.events import ToolResultEvent
-from kel.models.types import MessageStop, TextDelta, ToolCallDelta
-
-
-def _event_to_json(event: Any) -> dict[str, Any]:
-    if isinstance(event, TextDelta):
-        return {"type": "text_delta", "text": event.text}
-    if isinstance(event, ToolCallDelta):
-        return {"type": "tool_call_delta", "name": event.tool_call.name, "input": event.tool_call.input}
-    if isinstance(event, ToolResultEvent):
-        return {
-            "type": "tool_result",
-            "name": event.name,
-            "result": event.result.content,
-            "is_error": event.result.is_error,
-        }
-    if isinstance(event, MessageStop):
-        return {"type": "message_stop", "text": event.response.text, "stop_reason": event.response.stop_reason}
-    return {"type": "unknown"}
+from kel.sdk._stream_events import event_to_json
 
 
 async def _handle_connection(agent: Agent, websocket: Any, *_extra: Any) -> None:
@@ -60,7 +42,7 @@ async def _handle_connection(agent: Agent, websocket: Any, *_extra: Any) -> None
             continue
         try:
             for event in agent.run_stream(user_input):
-                await websocket.send(json.dumps(_event_to_json(event)))
+                await websocket.send(json.dumps(event_to_json(event)))
         except Exception as exc:
             await websocket.send(json.dumps({"type": "error", "error": str(exc)}))
 

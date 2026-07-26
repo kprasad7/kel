@@ -78,8 +78,9 @@ pgvector = ["psycopg[binary]>=3.1", "pgvector>=0.3"]
 pdf = ["pypdf>=4.0"]
 mcp = ["mcp>=1.0"]
 websockets = ["websockets>=12.0"]
+fastapi = ["fastapi>=0.100", "uvicorn>=0.23"]
 all = [
-    "pykel[anthropic,openai,cohere,gemini,mistral,otel,s3,qdrant,pinecone,weaviate,chroma,pgvector,pdf,mcp,websockets]",
+    "pykel[anthropic,openai,cohere,gemini,mistral,otel,s3,qdrant,pinecone,weaviate,chroma,pgvector,pdf,mcp,websockets,fastapi]",
 ]
 dev = [
     "pytest>=8.0",
@@ -87,6 +88,8 @@ dev = [
     "qdrant-client>=1.10",
     "weaviate-client>=4.6",
     "websockets>=12.0",
+    "fastapi>=0.100",
+    "httpx>=0.24",
     "ruff>=0.6",
     "mypy>=1.11",
 ]
