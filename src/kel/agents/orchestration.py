@@ -22,11 +22,77 @@ from kel.agents.agent import Agent
 from kel.context.loop import Loop
 from kel.runtime.graph import Graph
 
+ContextSelector = Callable[[str, dict[str, Any]], dict[str, Any]]
 
-def sequential_pipeline(agents: list[Agent]) -> Graph:
+
+def agent_node(
+    agent: Agent, *, input_key: str = "input", output_key: str | None = None
+) -> Callable[[dict[str, Any]], dict[str, Any]]:
+    """Wraps an `Agent` as a `kel.runtime.Graph` node function, so agents
+    compose into fully dynamic, cyclic, multi-directional graphs
+    (conditional edges, loops, arbitrary branching) via `Graph` directly
+    — not just the four fixed shapes below (sequential/supervisor/
+    parallel/swarm). `Graph` already supports cycles and conditional
+    routing (a router can send execution back to an already-visited
+    node — that's how agentic loops are expressed, see
+    `kel.runtime.graph`'s docstring); this just makes wiring an `Agent`
+    into that as trivial as wiring in a plain function.
+
+    Reads the task from `state[input_key]` and writes the agent's
+    response text to `state[output_key]` (default `f"{agent.name}_output"`)
+    — the same partial-state-update convention every other node already
+    uses, so agent_node()s and plain function nodes mix freely in one
+    graph, and nothing is ever overwritten unless two nodes deliberately
+    write the same key (e.g. "loop back to agent C but keep agent B's
+    variables" falls out for free — B's output key is simply never
+    touched by the loop back to C).
+
+    ```python
+    graph = Graph(entry="draft")
+    graph.add_node("draft", agent_node(writer))
+    graph.add_node("validate", agent_node(validator, input_key="draft_output"))
+    graph.add_node("revise", agent_node(reviser, input_key="draft_output"))
+    graph.add_edge("draft", "validate")
+    graph.add_conditional_edges(
+        "validate", lambda state: "revise" if "FAIL" in state["validate_output"] else END
+    )
+    graph.add_edge("revise", "validate")  # loop back until validation passes
+    ```
+    """
+    key = output_key or f"{agent.name}_output"
+
+    def node(state: dict[str, Any]) -> dict[str, Any]:
+        response = agent.run(state.get(input_key, ""))
+        return {key: response.text}
+
+    return node
+
+
+def sequential_pipeline(agents: list[Agent], *, context_selector: ContextSelector | None = None) -> Graph:
     """Each agent runs after the previous, seeing every prior agent's
     output via shared graph state (`{agent_name}_output`), not just the
-    latest message."""
+    latest message.
+
+    **Scoping what each agent sees.** With many agents in one pipeline,
+    dumping every upstream output into every downstream agent's prompt
+    gets noisy — agent 5 doesn't necessarily need agents 1 through 4's
+    full output verbatim, just whatever's actually relevant to it. Pass
+    `context_selector(agent_name, state) -> dict` to filter the shared
+    state down to what a given agent should see before its prompt is
+    built (still a plain dict — no new abstraction, just an injected
+    filter over the existing one). Left unset, every agent sees the full
+    upstream state, matching prior behavior.
+
+    ```python
+    def only_from(*names):
+        return lambda agent_name, state: {
+            k: v for k, v in state.items() if any(k.startswith(f"{n}_") for n in names)
+        }
+
+    sequential_pipeline([researcher, writer, editor], context_selector=only_from("researcher"))
+    # `editor` only sees `researcher`'s output, not `writer`'s intermediate draft
+    ```
+    """
     if not agents:
         raise ValueError("sequential_pipeline requires at least one agent")
 
@@ -34,7 +100,8 @@ def sequential_pipeline(agents: list[Agent]) -> Graph:
 
     def make_node(agent: Agent) -> Callable[[dict[str, Any]], dict[str, Any]]:
         def node(state: dict[str, Any]) -> dict[str, Any]:
-            upstream = "\n".join(f"[{k}]: {v}" for k, v in state.items() if k.endswith("_output"))
+            visible = context_selector(agent.name, state) if context_selector else state
+            upstream = "\n".join(f"[{k}]: {v}" for k, v in visible.items() if k.endswith("_output"))
             task = state.get("input", "")
             combined = f"{upstream}\n\n{task}".strip() if upstream else task
             response = agent.run(combined)
@@ -61,21 +128,36 @@ def run_parallel(
     return {"results": results, "merged": merged}
 
 
-def run_supervisor(supervisor: Agent, workers: dict[str, Agent], task: str, *, max_rounds: int = 5) -> dict[str, Any]:
+def run_supervisor(
+    supervisor: Agent,
+    workers: dict[str, Agent],
+    task: str,
+    *,
+    max_rounds: int = 5,
+    results_selector: Callable[[dict[str, str]], dict[str, str]] | None = None,
+) -> dict[str, Any]:
     """Supervisor decides each round whether to delegate to a named worker
     or finish, via a small text protocol (`DELEGATE: name :: instructions`
     / `DONE: answer`). Bounded by Loop, same as a single agent's tool
     loop — a stuck supervisor (repeating the same delegation) is caught
-    the same way a stuck tool-calling agent is."""
+    the same way a stuck tool-calling agent is.
+
+    With many rounds of delegation, `results` grows every round and the
+    full dict gets dumped into the supervisor's prompt each time — pass
+    `results_selector(results) -> dict` to show it a trimmed view (e.g.
+    only the most recent N entries) instead of the ever-growing whole.
+    Left unset, the supervisor sees every result so far, matching prior
+    behavior."""
     shared_state: dict[str, Any] = {"task": task, "results": {}}
     loop = Loop(max_iterations=max_rounds)
 
     while True:
         loop.step()
+        visible_results = results_selector(shared_state["results"]) if results_selector else shared_state["results"]
         instruction = (
             f"Task: {shared_state['task']}\n"
             f"Available workers: {', '.join(workers)}\n"
-            f"Results so far: {shared_state['results']}\n"
+            f"Results so far: {visible_results}\n"
             "Respond with exactly one line: either 'DELEGATE: <worker> :: <instructions>' "
             "or 'DONE: <final answer>'."
         )

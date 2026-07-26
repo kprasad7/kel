@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-07-26
+
+### Added
+- `Graph.set_fallback()` (`kel.runtime`): a node that raises now routes to a designated fallback node instead of crashing the whole run, with the error captured into `state["__error__"]` for the fallback to actually inspect. Opt-in per node — a node without a fallback registered still raises, same as before.
+- `HallucinationChecker` (`kel.agents`): a second, more expensive pass that checks whether a response's claims are actually supported by given source material (RAG chunks, tool results, etc.), using the same one-call structured-output pattern `LLMReranker` uses. Not wired into `Agent` automatically — run it yourself after `agent.run(...)`.
+- `ttl_seconds` on `SemanticMemory.remember()`: an opt-in expiration per fact (default: never expires). `search()` never returns an expired fact; `forget_expired()` purges them from storage. One parameter instead of a forced multi-tier memory taxonomy.
+- `Notifier`/`WebhookNotifier`/`notify_interrupt()` (`kel.runtime`): `Interrupt`/`resume_graph()`/`CheckpointStore` already let a run pause and resume arbitrarily later (state is just data — persist it for weeks if needed); this closes the other half, telling a human it's actually waiting on them. `WebhookNotifier` is a zero-new-required-dependency stdlib `urllib` POST, compatible with Slack incoming webhooks, PagerDuty, and most custom notification endpoints.
+
+## [1.2.0] - 2026-07-26
+
+### Added
+- `context_selector` on `sequential_pipeline` and `results_selector` on `run_supervisor`: injected filters that scope what each agent/the supervisor actually sees from shared state, instead of always seeing every upstream output or every accumulated result — closes the "shared context bus floods downstream agents" complaint for pipelines with many agents.
+- `fork_from_checkpoint()` (`kel.runtime`): real state time-travel — rewind to an arbitrary historical `Checkpoint` (not just an `Interrupt`'s pause point, which is all `resume_graph` exposed) and continue forward as a new branch, optionally patching state first. This is what `Checkpoint`'s own docstring already promised ("a run can pause/resume/branch from any point") but `run_graph`/`resume_graph` alone never actually exposed.
+- `agent_node()` (`kel.agents`): wraps any `Agent` as a `kel.runtime.Graph` node function, so agents compose into fully dynamic, cyclic, multi-directional graphs via `Graph` directly (which already supports conditional edges and cycles) instead of being limited to the four fixed orchestration shapes (sequential/supervisor/parallel/swarm).
+- `MCPToolset`/`mcp_tools_from_server()` (`kel.tools`, `pip install kel[mcp]`): connects to a Model Context Protocol server and exposes every tool it advertises as a `kel.agents.Tool` in one call, instead of hand-writing a custom integration adapter per server.
+- `serve_websocket()`/`KelWebSocketServer` (`kel.sdk`, `pip install kel[websockets]`): a working WebSocket endpoint that streams `Agent.run_stream()` events to a connected client — the concrete, ready-made piece behind the common "stream an agent's response over a socket" case, versus needing to hand-write the async network loop yourself. Full bidirectional voice/video realtime orchestration remains `kel.realtime`'s documented interfaces-only scope, a real vendor SDK's job.
+
 ## [1.1.0] - 2026-07-26
 
 ### Added
@@ -72,7 +89,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.md`-based agent specs, CLI (`run`/`eval`/`trace`), and `serve()` HTTP runtime.
 - DevSecOps pipeline: Trivy, pip-audit, and Bandit scanning; Dependabot.
 
-[Unreleased]: https://github.com/kprasad7/kel/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/kprasad7/kel/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/kprasad7/kel/releases/tag/v1.3.0
+[1.2.0]: https://github.com/kprasad7/kel/releases/tag/v1.2.0
 [1.1.0]: https://github.com/kprasad7/kel/releases/tag/v1.1.0
 [1.0.2]: https://github.com/kprasad7/kel/releases/tag/v1.0.2
 [1.0.1]: https://github.com/kprasad7/kel/releases/tag/v1.0.1

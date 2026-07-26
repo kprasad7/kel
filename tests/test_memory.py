@@ -1,4 +1,5 @@
 import tempfile
+import time
 from pathlib import Path
 
 from kel.memory import (
@@ -6,6 +7,7 @@ from kel.memory import (
     InMemoryEpisodicStore,
     Memory,
     ProceduralMemory,
+    SemanticFact,
     SemanticMemory,
     SQLiteEpisodicStore,
     WorkingMemory,
@@ -100,6 +102,42 @@ def test_semantic_memory_forget_removes_fact():
     assert len(sm) == 1
     sm.forget(fid)
     assert len(sm) == 0
+
+
+def test_semantic_fact_without_ttl_never_expires():
+    fact = SemanticFact(id="1", text="foundational fact", created_at=0.0, ttl_seconds=None)
+    assert fact.is_expired(now=10_000_000.0) is False
+
+
+def test_semantic_fact_with_ttl_expires_after_the_deadline():
+    fact = SemanticFact(id="1", text="passing remark", created_at=1000.0, ttl_seconds=60.0)
+    assert fact.is_expired(now=1030.0) is False  # 30s elapsed, still within 60s TTL
+    assert fact.is_expired(now=1061.0) is True  # 61s elapsed, past the 60s TTL
+
+
+def test_search_excludes_expired_facts():
+    sm = SemanticMemory()
+    sm.remember("permanent fact about dark mode preference", id="permanent")
+    sm.remember("temporary fact about dark mode preference", id="temporary", ttl_seconds=1.0)
+    # force the temporary fact into the past so it's already expired
+    sm._facts["temporary"].created_at = time.time() - 100
+
+    results = sm.search("dark mode")
+
+    assert [f.id for f in results] == ["permanent"]
+
+
+def test_forget_expired_purges_only_expired_facts_and_returns_the_count():
+    sm = SemanticMemory()
+    sm.remember("permanent fact", id="permanent")
+    sm.remember("temporary fact", id="temporary", ttl_seconds=1.0)
+    sm._facts["temporary"].created_at = time.time() - 100
+
+    removed = sm.forget_expired()
+
+    assert removed == 1
+    assert len(sm) == 1
+    assert sm.search("permanent")[0].id == "permanent"
 
 
 def test_procedural_memory_save_load_list_delete():

@@ -81,6 +81,53 @@ def resume_graph(
     )
 
 
+def fork_from_checkpoint(
+    graph: Graph,
+    checkpoint: Checkpoint,
+    *,
+    state_overrides: dict[str, Any] | None = None,
+    history: list[str] | None = None,
+    run_id: str | None = None,
+    loop: Loop | None = None,
+    tracer: Tracer | None = None,
+    checkpoint_store: CheckpointStore | None = None,
+) -> GraphRun:
+    """Rewind to an arbitrary historical checkpoint and continue execution
+    forward from there — a new timeline branching off the old one (a
+    fresh `run_id` by default), not merely resuming the same run.
+
+    This is the actual "time travel" `Checkpoint`'s own docstring
+    describes ("a run can pause/resume/branch from any point"), which
+    `resume_graph` alone doesn't expose: `resume_graph` can only continue
+    from an `Interrupt`'s pause point, not an arbitrary earlier step
+    pulled from `CheckpointStore.history(run_id)`.
+
+    `state_overrides` patches the rewound state before continuing — e.g.
+    fix the broken variable that made step 12 fail — merged on top of the
+    checkpoint's own state:
+
+    ```python
+    checkpoints = checkpoint_store.history(run_id)
+    step_11 = next(c for c in checkpoints if c.step == 11)
+    forked = fork_from_checkpoint(graph, step_11, state_overrides={"retry_count": 0})
+    ```
+    """
+    graph.validate()
+    state = dict(checkpoint.state)
+    if state_overrides:
+        state.update(state_overrides)
+    return _run(
+        graph,
+        state,
+        current_layer=graph.next_nodes(checkpoint.node, state),
+        history=list(history) if history is not None else [checkpoint.node],
+        run_id=run_id or uuid.uuid4().hex,
+        loop=loop or Loop(max_iterations=100),
+        tracer=tracer or get_tracer(),
+        checkpoint_store=checkpoint_store,
+    )
+
+
 def _run(
     graph: Graph,
     state: dict[str, Any],
@@ -104,6 +151,7 @@ def _run(
 
             next_layer: list[str] = []
             for node_name in current_layer:
+                fallback_node: str | None = None
                 try:
                     with tracer.span("kel.runtime.node", node=node_name, run_id=run_id):
                         update = futures[node_name].result() or {}
@@ -119,6 +167,17 @@ def _run(
                         interrupt_payload=exc.payload,
                         pending_node=node_name,
                     )
+                except Exception as exc:
+                    # a plain node crash used to always crash the whole
+                    # run — no fallback path, unlike a DAG engine with
+                    # per-node error routing. If a fallback was registered
+                    # for this node (Graph.set_fallback), route there
+                    # instead, with the error captured into state for the
+                    # fallback node to actually see and react to.
+                    fallback_node = graph.fallback_for(node_name)
+                    if fallback_node is None:
+                        raise
+                    update = {"__error__": {"node": node_name, "error": str(exc)}}
 
                 signature = update.pop("__signature__", None)
                 if signature is not None:
@@ -132,7 +191,10 @@ def _run(
                         Checkpoint(run_id=run_id, step=len(history), node=node_name, state=dict(state))
                     )
 
-                next_layer.extend(graph.next_nodes(node_name, state))
+                if fallback_node is not None:
+                    next_layer.append(fallback_node)
+                else:
+                    next_layer.extend(graph.next_nodes(node_name, state))
 
             # de-dupe while preserving order, so the same node requested by
             # two branches in one layer only runs once in the next layer

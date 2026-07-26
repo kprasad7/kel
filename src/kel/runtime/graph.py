@@ -28,6 +28,7 @@ class Graph:
         self.entry = entry
         self.nodes: dict[str, NodeFn] = {}
         self._edges: dict[str, Router] = {}
+        self._fallbacks: dict[str, str] = {}
 
     def add_node(self, name: str, fn: NodeFn) -> None:
         self.nodes[name] = fn
@@ -43,6 +44,22 @@ class Graph:
 
     def set_finish(self, name: str) -> None:
         self._edges[name] = lambda _state: []
+
+    def set_fallback(self, node_name: str, fallback_node: str) -> None:
+        """If `node_name`'s function raises (anything other than
+        `Interrupt`, which pauses the run instead), route to
+        `fallback_node` next instead of letting the exception crash the
+        whole run — the executor's normal edges/router for `node_name`
+        are skipped entirely in favor of going straight to the fallback.
+        The exception is captured into `state["__error__"]` as
+        `{"node": node_name, "error": str(exc)}` so the fallback node can
+        inspect what went wrong (e.g. retry with a different prompt, ask
+        a human, or degrade gracefully) rather than only knowing *that*
+        something failed."""
+        self._fallbacks[node_name] = fallback_node
+
+    def fallback_for(self, node_name: str) -> str | None:
+        return self._fallbacks.get(node_name)
 
     def next_nodes(self, from_node: str, state: dict[str, Any]) -> list[str]:
         router = self._edges.get(from_node)

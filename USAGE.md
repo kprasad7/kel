@@ -221,8 +221,10 @@ Semantic memory (long-term facts), procedural memory (learned patterns as `.md`)
 from kel.memory import SemanticMemory, ProceduralMemory
 
 facts = SemanticMemory()
-facts.remember("user prefers dark mode")
-facts.search("UI preferences")           # keyword search by default
+facts.remember("user prefers dark mode")                          # never expires
+facts.remember("mentioned they're traveling this week", ttl_seconds=86400)  # decays after a day
+facts.search("UI preferences")           # keyword search by default; never returns expired facts
+facts.forget_expired()                   # reclaim storage; returns how many were purged
 
 procedures = ProceduralMemory("./procedures")
 procedures.save("retry-pattern", "# Retry\nAlways retry idempotent calls once.")
@@ -403,6 +405,64 @@ result = run_supervisor(supervisor, {"worker1": worker}, "big task")
 result = run_swarm({"a": agent_a, "b": agent_b}, start_agent="a", task="task")
 ```
 
+**Scoping what each agent sees.** With many agents in one pipeline,
+every downstream agent seeing every upstream output verbatim gets noisy.
+`context_selector`/`results_selector` filter the shared state before an
+agent (or the supervisor) sees it:
+
+```python
+def only_from(*names):
+    return lambda agent_name, state: {
+        k: v for k, v in state.items() if any(k.startswith(f"{n}_") for n in names)
+    }
+
+sequential_pipeline([researcher, writer, editor], context_selector=only_from("researcher"))
+# editor only sees researcher's output, not writer's intermediate draft
+
+run_supervisor(supervisor, workers, task, results_selector=lambda results: dict(list(results.items())[-3:]))
+# supervisor only sees the 3 most recent results, not the whole growing history
+```
+
+**Dynamic, cyclic multi-agent flows.** The four patterns above are fixed
+shapes; for anything more dynamic (conditional branching, loops back to
+an earlier agent), build directly on `kel.runtime.Graph` — which already
+supports conditional edges and cycles — using `agent_node()` to wrap any
+`Agent` as a Graph node function:
+
+```python
+from kel.agents import agent_node
+from kel.runtime import Graph, END, run_graph
+
+graph = Graph(entry="draft")
+graph.add_node("draft", agent_node(writer))
+graph.add_node("validate", agent_node(validator, input_key="draft_output"))
+graph.add_node("revise", agent_node(reviser, input_key="draft_output", output_key="draft_output"))
+graph.add_edge("draft", "validate")
+graph.add_conditional_edges("validate", lambda s: "revise" if "FAIL" in s["validator_output"] else END)
+graph.add_edge("revise", "validate")  # loop back until validation passes
+
+result = run_graph(graph, {})
+```
+
+**Checking a response for hallucinated claims.** `HallucinationChecker`
+is a second, more expensive pass — the same one-call structured-output
+pattern `kel.retrieval.LLMReranker` uses — that checks whether a
+response's claims are actually supported by given source material (RAG
+chunks, tool results, anything). Not wired into `Agent` automatically;
+run it yourself after `agent.run(...)`:
+
+```python
+from kel.agents import HallucinationChecker
+
+checker = HallucinationChecker(model)
+response = agent.run("summarize the incident report")
+report = checker.check(response.text, sources=retrieved_chunks_text)
+
+if not report.grounded:
+    report.unsupported_claims  # specific claims not backed by the sources
+    # retry, ask for citations, escalate to a human, etc.
+```
+
 ---
 
 ## 9. Runtime / Execution Graph (`kel.runtime`)
@@ -427,6 +487,49 @@ Fan-out to multiple nodes in one layer runs them concurrently (real threads, not
 
 ```python
 graph.add_conditional_edges("router", lambda state: ["path_a", "path_b"])
+```
+
+**Time travel: rewinding to an arbitrary historical checkpoint.**
+`resume_graph()` only continues from an `Interrupt`'s pause point — to
+rewind to any earlier step and branch off a new timeline (e.g. a 15-step
+run failed at step 12; go back to step 11, patch the broken variable,
+and continue):
+
+```python
+from kel.runtime import fork_from_checkpoint
+
+checkpoints = store.history("run-1")
+step_11 = next(c for c in checkpoints if c.step == 11)
+
+forked = fork_from_checkpoint(graph, step_11, state_overrides={"retry_count": 0})
+forked.run_id  # a new run_id — a branch, not a continuation of run-1
+```
+
+**Fallback routing on node failure.** A node raising an exception used
+to always crash the whole run. `set_fallback` routes to a designated
+node instead, with the error captured into `state["__error__"]` for the
+fallback to actually inspect:
+
+```python
+graph.add_node("risky_step", call_flaky_api)
+graph.add_node("recover", lambda state: {"answer": f"fallback after: {state['__error__']['error']}"})
+graph.set_fallback("risky_step", "recover")
+```
+
+**Durable human-in-the-loop notifications.** `Interrupt` already lets a
+run pause and `resume_graph()` continue it arbitrarily later — the
+missing piece was telling a human it's waiting. `notify_interrupt` sends
+one via any `Notifier` (a `WebhookNotifier` — Slack incoming webhooks,
+PagerDuty, or your own endpoint — ships built in):
+
+```python
+from kel.runtime import WebhookNotifier, notify_interrupt
+
+paused = run_graph(graph, {}, checkpoint_store=store, run_id="run-1")
+if paused.interrupted:
+    notify_interrupt(paused, WebhookNotifier("https://hooks.example.com/..."))
+    # ... persist `paused` (or a Checkpoint) somewhere durable; whenever
+    # the human actually responds, days later is fine, call resume_graph()
 ```
 
 ---
@@ -558,6 +661,17 @@ Serve it over HTTP (stdlib-only, no extra dependency — local/demo use, not a p
 from kel.sdk import serve
 with serve(agent, port=8000) as server:
     ...   # POST {"input": "..."} to http://127.0.0.1:8000/invoke -> {"text": ..., "stop_reason": ...}
+```
+
+Or stream its response over a WebSocket (`pip install "pykel[websockets]"`):
+
+```python
+from kel.sdk import serve_websocket
+with serve_websocket(agent, port=8000) as server:
+    ...  # connect to ws://127.0.0.1:8000/, send {"input": "..."}, receive
+         # {"type": "text_delta", ...} / {"type": "tool_result", ...} /
+         # {"type": "message_stop", "text": ..., "stop_reason": ...}
+         # as the agent's run_stream() events arrive
 ```
 
 CLI:
@@ -705,6 +819,22 @@ agent = Agent(
     tools=[wikipedia_search_tool(max_results=3), fetch_url_tool(max_chars=3000)],
 )
 ```
+
+**MCP (Model Context Protocol) servers** (`pip install "pykel[mcp]"`) —
+connect once, get every tool the server advertises as a `kel.agents.Tool`,
+instead of hand-writing a custom integration adapter per server:
+
+```python
+from kel.tools import mcp_tools_from_server
+from mcp import StdioServerParameters
+
+tools = mcp_tools_from_server(StdioServerParameters(command="npx", args=["-y", "@some/mcp-server"]))
+agent = Agent("mcp-agent", model, tools=tools)
+```
+
+Use `MCPToolset` directly (instead of the one-shot `mcp_tools_from_server`)
+if you need to `.close()` the connection deterministically rather than
+holding it open for the process's lifetime.
 
 ---
 
