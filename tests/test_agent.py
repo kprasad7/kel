@@ -1,3 +1,4 @@
+import threading
 import time
 
 import pytest
@@ -6,6 +7,7 @@ from helpers import ScriptedModel
 from kel.agents import Agent, Tool
 from kel.agents.errors import EmptyModelResponseError
 from kel.context import Loop, LoopBudgetExceededError, StuckLoopError
+from kel.models.base import ChatModel
 from kel.models.types import ModelResponse, TextPart, ToolUsePart, Usage
 
 
@@ -267,5 +269,55 @@ def test_agent_with_no_approval_hook_runs_every_tool_call_as_before():
     response = agent.run("what is 1+1?")
 
     assert response.text == "2"
+
+
+class _ConcurrencyTrackingModel(ChatModel):
+    """Records the peak number of generate() calls actually in flight at
+    once — the invariant an Agent-level lock must enforce: at most 1,
+    never truly concurrent, no matter how many threads call run() on the
+    same Agent instance at once."""
+
+    provider = "fake"
+    model_id = "fake"
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._in_flight = 0
+        self.max_in_flight = 0
+
+    def generate(self, messages, **kwargs):
+        with self._lock:
+            self._in_flight += 1
+            self.max_in_flight = max(self.max_in_flight, self._in_flight)
+        time.sleep(0.02)
+        with self._lock:
+            self._in_flight -= 1
+        return _response([TextPart(text="ok")], "end_turn")
+
+    def stream(self, messages, **kwargs):
+        raise NotImplementedError
+
+
+def test_agent_serializes_concurrent_run_calls_on_the_same_instance():
+    # regression: concurrent run() calls on one shared Agent (the pattern
+    # kel.sdk.serve/serve_websocket/fastapi_adapter's "one Agent handles
+    # every request" naturally invites) used to interleave their
+    # memory.remember_turn() writes with no ordering guarantee —
+    # reproduced as 5 concurrent calls producing 5 user messages
+    # back-to-back, then 5 assistant messages, instead of 5 alternating
+    # pairs. The Agent-level lock must prevent two calls from ever
+    # actually being in the generate() critical section at once.
+    model = _ConcurrencyTrackingModel()
+    agent = Agent("shared", model)
+
+    threads = [threading.Thread(target=agent.run, args=(f"question-{i}",)) for i in range(5)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert model.max_in_flight == 1
+    roles = [m.role for m in agent.memory.working.messages]
+    assert roles == ["user", "assistant"] * 5
 
 

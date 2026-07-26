@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 from collections.abc import AsyncIterator, Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
@@ -58,6 +59,25 @@ class Agent:
         # one hook covers every path without duplicating the check.
         # Unset means every tool call is approved, matching prior behavior.
         self.approve_tool_call = approve_tool_call
+        # One Agent instance = one conversation. Concurrent calls to
+        # run()/run_stream() (or arun()/arun_stream()) on the *same*
+        # instance would otherwise interleave their memory.remember_turn()
+        # writes with no ordering guarantee — e.g. two concurrent run()
+        # calls from a server handling two requests against one shared
+        # Agent can scramble both turns' user/assistant messages together
+        # (reproduced: 5 concurrent calls produced 5 user messages back
+        # to back, then 5 assistant messages, not alternating pairs).
+        # These locks serialize calls on one instance so a turn's memory
+        # writes always complete atomically relative to any other call on
+        # the same Agent — construct one Agent per session/connection for
+        # real concurrent multi-user serving (kel.sdk.serve_websocket/
+        # fastapi_adapter) rather than sharing one Agent across callers.
+        # Sync and async paths use separate locks (a thread lock can't be
+        # awaited); mixing run()/arun() calls on one instance from
+        # different threads concurrently is not covered by this and
+        # should be avoided.
+        self._sync_lock = threading.Lock()
+        self._async_lock = asyncio.Lock()
 
     def _generation_kwargs(self) -> dict[str, Any]:
         kwargs: dict[str, Any] = {}
@@ -85,6 +105,10 @@ class Agent:
             )
 
     def run(self, user_input: str) -> ModelResponse:
+        with self._sync_lock:
+            return self._run_locked(user_input)
+
+    def _run_locked(self, user_input: str) -> ModelResponse:
         self.memory.remember_turn(Message.user(user_input))
         loop = self._loop_factory()
         tool_specs = [t.to_spec() for t in self.tools.values()] or None
@@ -113,6 +137,10 @@ class Agent:
     async def arun(self, user_input: str) -> ModelResponse:
         """Async equivalent of `run()` — same loop, uses the model's real
         `agenerate()` instead of blocking `generate()`."""
+        async with self._async_lock:
+            return await self._arun_locked(user_input)
+
+    async def _arun_locked(self, user_input: str) -> ModelResponse:
         self.memory.remember_turn(Message.user(user_input))
         loop = self._loop_factory()
         tool_specs = [t.to_spec() for t in self.tools.values()] or None
@@ -144,6 +172,10 @@ class Agent:
         turns, not just the final answer. A `ToolResultEvent` is yielded
         after each tool finishes, so a UI can show "calling search..."
         progress that model-level streaming alone can't express."""
+        with self._sync_lock:
+            yield from self._run_stream_locked(user_input)
+
+    def _run_stream_locked(self, user_input: str) -> Iterator[StreamEvent | ToolResultEvent]:
         self.memory.remember_turn(Message.user(user_input))
         loop = self._loop_factory()
         tool_specs = [t.to_spec() for t in self.tools.values()] or None
@@ -181,6 +213,11 @@ class Agent:
 
     async def arun_stream(self, user_input: str) -> AsyncIterator[StreamEvent | ToolResultEvent]:
         """Async equivalent of `run_stream()`, using the model's real `astream()`."""
+        async with self._async_lock:
+            async for event in self._arun_stream_locked(user_input):
+                yield event
+
+    async def _arun_stream_locked(self, user_input: str) -> AsyncIterator[StreamEvent | ToolResultEvent]:
         self.memory.remember_turn(Message.user(user_input))
         loop = self._loop_factory()
         tool_specs = [t.to_spec() for t in self.tools.values()] or None

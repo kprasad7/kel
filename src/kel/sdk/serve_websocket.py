@@ -16,6 +16,12 @@ Same "interfaces only, zero extra dependency by default" shape as
 `kel.sdk.serve`'s HTTP server: no auth, no reconnect/backpressure
 handling — this is "expose an agent's stream over a socket for
 local/demo use," not a production realtime deployment story.
+
+**Every connection shares the one `Agent` passed in here** — `Agent`
+serializes concurrent calls on itself (no corruption from two clients
+connecting at once), but they still all read/write the *same*
+conversation history. Construct a fresh `Agent` per connection (its own
+`Memory(session_id=..., ...)`) for real multi-client serving.
 """
 
 from __future__ import annotations

@@ -72,3 +72,11 @@ class Graph:
     def validate(self) -> None:
         if self.entry not in self.nodes:
             raise ValueError(f"entry node {self.entry!r} is not registered")
+        for node_name, fallback_node in self._fallbacks.items():
+            if fallback_node not in self.nodes:
+                raise ValueError(
+                    f"fallback node {fallback_node!r} (registered via set_fallback({node_name!r}, "
+                    f"{fallback_node!r})) is not a registered node — add_node it, or fix the typo. "
+                    f"Without this check, a failing {node_name!r} would only surface a confusing "
+                    f"raw KeyError deep inside the executor once the fallback path was actually taken."
+                )

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-07-26
+
+### Fixed
+- **Concurrent calls to `run()`/`arun()`/`run_stream()`/`arun_stream()` on the same `Agent` instance could interleave their `memory.remember_turn()` writes, silently scrambling conversation history** — reproduced as 5 concurrent `run()` calls producing 5 user messages back-to-back, then 5 assistant messages, instead of 5 alternating pairs. This became much more likely to hit in practice now that `kel.sdk.serve`/`serve_websocket`/`fastapi_adapter` all naturally invite multiple concurrent callers against one shared `Agent`. Fixed with a per-instance lock (`threading.Lock` for the sync methods, `asyncio.Lock` for the async ones) serializing calls on one `Agent`; different `Agent` instances are unaffected and still run fully concurrently. Documented in `serve`/`serve_websocket`/`fastapi_adapter` that sharing one `Agent` across many callers still means they share one conversation (no longer corrupted, but still one history) — construct one `Agent` per session for real multi-user serving.
+- `Graph.set_fallback()` pointing at a node that was never registered (e.g. a typo) used to only surface as a confusing raw `KeyError` deep inside the executor, and only once the fallback path was actually taken at runtime. `Graph.validate()` now catches this up front, the same way it already validates `entry`.
+
 ## [1.5.0] - 2026-07-26
 
 ### Added
@@ -100,7 +106,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.md`-based agent specs, CLI (`run`/`eval`/`trace`), and `serve()` HTTP runtime.
 - DevSecOps pipeline: Trivy, pip-audit, and Bandit scanning; Dependabot.
 
-[Unreleased]: https://github.com/kprasad7/kel/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/kprasad7/kel/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/kprasad7/kel/releases/tag/v1.5.1
 [1.5.0]: https://github.com/kprasad7/kel/releases/tag/v1.5.0
 [1.4.0]: https://github.com/kprasad7/kel/releases/tag/v1.4.0
 [1.3.0]: https://github.com/kprasad7/kel/releases/tag/v1.3.0

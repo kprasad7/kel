@@ -24,6 +24,13 @@ Same "interfaces made concrete, not a production framework" shape as
 `kel.sdk.serve`/`serve_websocket`: no auth, no rate limiting built in —
 mount these routes on an app that already has whatever middleware your
 deployment needs, same as you'd do for any other FastAPI route.
+
+**Every request shares the one `Agent` passed in here** — `Agent`
+serializes concurrent calls on itself (no corruption from two requests
+arriving at once), but they still all read/write the *same* conversation
+history. Construct a fresh `Agent` per user/session (its own
+`Memory(session_id=..., ...)`) for a real multi-user API rather than one
+`Agent` answering for everyone.
 """
 
 from __future__ import annotations

@@ -246,6 +246,24 @@ def test_node_failure_with_a_fallback_routes_there_instead_of_crashing():
     assert result.history == ["risky", "recover"]
 
 
+def test_set_fallback_to_an_unregistered_node_raises_a_clear_error_at_validate_time():
+    # regression: a typo'd fallback target used to only surface as a raw,
+    # confusing KeyError deep inside the executor, and only once the
+    # fallback path was actually taken at runtime (i.e. only after the
+    # node it protects had already failed) — validate() should catch the
+    # misconfiguration itself up front, same as it already does for entry.
+    graph = Graph(entry="risky")
+
+    def risky(state):
+        raise ValueError("boom")
+
+    graph.add_node("risky", risky)
+    graph.set_fallback("risky", "recovr")  # typo — "recovr" never registered
+
+    with pytest.raises(ValueError, match="recovr"):
+        run_graph(graph, {})
+
+
 def test_fallback_node_can_itself_continue_the_graph_normally():
     def risky(state):
         raise ValueError("boom")

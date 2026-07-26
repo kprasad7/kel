@@ -4,7 +4,15 @@ zero extra dependency for a genuinely working synchronous HTTP endpoint.
 No streaming, no auth, no concurrency tuning: this is "expose an agent for
 local testing/demos," not a production deployment story. A real deploy
 story (ASGI, streaming, auth) is a reasonable future upgrade behind the
-same `serve()` call, not something to fake here."""
+same `serve()` call, not something to fake here.
+
+**Every request shares the one `Agent` (and its memory/conversation)
+passed in here.** `Agent` serializes concurrent calls on itself (no
+corruption from interleaved requests), but they still all read/write the
+*same* conversation history — this is a single-conversation demo
+endpoint, not a multi-user API. For real multi-user serving, construct a
+fresh `Agent` (with its own `Memory(session_id=..., ...)`) per session
+rather than sharing one across every caller."""
 
 from __future__ import annotations
 

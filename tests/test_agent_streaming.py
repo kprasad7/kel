@@ -1,7 +1,9 @@
+import asyncio
 import time
 
 from helpers import ScriptedModel, ScriptedStreamModel
 from kel.agents import Agent, Tool, ToolResultEvent
+from kel.models.base import ChatModel
 from kel.models.types import MessageStop, ModelResponse, TextDelta, TextPart, ToolCallDelta, ToolUsePart, Usage
 
 
@@ -116,3 +118,41 @@ async def test_arun_stream_yields_tool_results_as_each_completes_not_submission_
 
     tool_events = [e for e in collected if isinstance(e, ToolResultEvent)]
     assert [e.name for e in tool_events] == ["fast", "slow"]
+
+
+class _ConcurrencyTrackingAsyncModel(ChatModel):
+    """Async counterpart to test_agent.py's tracking model — records the
+    peak number of agenerate() calls actually in flight at once."""
+
+    provider = "fake"
+    model_id = "fake"
+
+    def __init__(self):
+        self._in_flight = 0
+        self.max_in_flight = 0
+
+    def generate(self, messages, **kwargs):
+        raise NotImplementedError
+
+    def stream(self, messages, **kwargs):
+        raise NotImplementedError
+
+    async def agenerate(self, messages, **kwargs):
+        self._in_flight += 1
+        self.max_in_flight = max(self.max_in_flight, self._in_flight)
+        await asyncio.sleep(0.02)
+        self._in_flight -= 1
+        return _final_text_response("ok", "r")
+
+
+async def test_agent_serializes_concurrent_arun_calls_on_the_same_instance():
+    # async counterpart to the sync run() regression test — arun() calls
+    # on one shared Agent must also be serialized, not just run().
+    model = _ConcurrencyTrackingAsyncModel()
+    agent = Agent("shared", model)
+
+    await asyncio.gather(*(agent.arun(f"question-{i}") for i in range(5)))
+
+    assert model.max_in_flight == 1
+    roles = [m.role for m in agent.memory.working.messages]
+    assert roles == ["user", "assistant"] * 5
