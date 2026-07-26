@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-07-26
+
+### Added
+- `create_fastapi_app()`/`add_agent_routes()` (`kel.sdk`) and `serve_websocket()` now accept a zero-arg `Agent` factory in addition to a single `Agent` instance. This closes the real production-scale gap both adapters' docstrings previously just documented as a limitation: a single shared `Agent` means every caller reads/writes the same conversation history. Passing a factory instead makes the FastAPI adapter look up `payload["session_id"]` in a lazily-built, TTL-evicted per-session registry (`session_ttl_seconds`, default 1 hour idle), and makes the WebSocket adapter build a fresh `Agent` per connection (a connection already being a natural session boundary). Passing a plain `Agent` still works exactly as before — this is additive, not a breaking change.
+
 ## [1.5.1] - 2026-07-26
 
 ### Fixed
@@ -106,7 +111,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.md`-based agent specs, CLI (`run`/`eval`/`trace`), and `serve()` HTTP runtime.
 - DevSecOps pipeline: Trivy, pip-audit, and Bandit scanning; Dependabot.
 
-[Unreleased]: https://github.com/kprasad7/kel/compare/v1.5.1...HEAD
+[Unreleased]: https://github.com/kprasad7/kel/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/kprasad7/kel/releases/tag/v1.6.0
 [1.5.1]: https://github.com/kprasad7/kel/releases/tag/v1.5.1
 [1.5.0]: https://github.com/kprasad7/kel/releases/tag/v1.5.0
 [1.4.0]: https://github.com/kprasad7/kel/releases/tag/v1.4.0

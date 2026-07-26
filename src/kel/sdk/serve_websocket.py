@@ -17,11 +17,14 @@ Same "interfaces only, zero extra dependency by default" shape as
 handling — this is "expose an agent's stream over a socket for
 local/demo use," not a production realtime deployment story.
 
-**Every connection shares the one `Agent` passed in here** — `Agent`
-serializes concurrent calls on itself (no corruption from two clients
-connecting at once), but they still all read/write the *same*
-conversation history. Construct a fresh `Agent` per connection (its own
-`Memory(session_id=..., ...)`) for real multi-client serving.
+**Single-agent mode vs. per-connection mode.** Pass an `Agent` instance
+and every connection shares it — `Agent` serializes concurrent calls on
+itself (no corruption from two clients connecting at once), but every
+client still reads/writes the *same* conversation history. For real
+multi-client serving, pass a zero-arg factory (`lambda: Agent(...)`)
+instead: a fresh `Agent` (its own memory) is built for each new
+connection and discarded when the connection closes — one connection is
+already a natural session boundary for a WebSocket.
 """
 
 from __future__ import annotations
@@ -29,16 +32,20 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
+from collections.abc import Callable
 from typing import Any
 
 from kel.agents.agent import Agent
 from kel.sdk._stream_events import event_to_json
 
+AgentFactory = Callable[[], Agent]
 
-async def _handle_connection(agent: Agent, websocket: Any, *_extra: Any) -> None:
+
+async def _handle_connection(agent_or_factory: Agent | AgentFactory, websocket: Any, *_extra: Any) -> None:
     # *_extra absorbs the legacy two-arg `(websocket, path)` handler
     # signature older `websockets` versions used, so this works across
     # the library's major versions without pinning one specific shape.
+    agent = agent_or_factory() if not isinstance(agent_or_factory, Agent) else agent_or_factory
     async for raw_message in websocket:
         try:
             payload = json.loads(raw_message)
@@ -54,7 +61,7 @@ async def _handle_connection(agent: Agent, websocket: Any, *_extra: Any) -> None
 
 
 class KelWebSocketServer:
-    def __init__(self, agent: Agent, *, host: str = "127.0.0.1", port: int = 0):
+    def __init__(self, agent: Agent | AgentFactory, *, host: str = "127.0.0.1", port: int = 0):
         self.agent = agent
         self._host = host
         self._port = port
@@ -116,7 +123,7 @@ class KelWebSocketServer:
         self.stop()
 
 
-def serve_websocket(agent: Agent, *, host: str = "127.0.0.1", port: int = 0) -> KelWebSocketServer:
+def serve_websocket(agent: Agent | AgentFactory, *, host: str = "127.0.0.1", port: int = 0) -> KelWebSocketServer:
     server = KelWebSocketServer(agent, host=host, port=port)
     server.start()
     return server

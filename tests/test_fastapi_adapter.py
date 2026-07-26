@@ -7,10 +7,9 @@ from kel.models.types import MessageStop, ModelResponse, TextDelta, TextPart, Us
 from kel.sdk.fastapi_adapter import add_agent_routes, create_fastapi_app
 
 
-def _agent_with_response(text: str) -> Agent:
-    model = ScriptedModel(
-        "fake-1", [ModelResponse(id="r", model="fake-1", content=[TextPart(text=text)], stop_reason="end_turn", usage=Usage())]
-    )
+def _agent_with_response(text: str, replies: int = 1) -> Agent:
+    response = ModelResponse(id="r", model="fake-1", content=[TextPart(text=text)], stop_reason="end_turn", usage=Usage())
+    model = ScriptedModel("fake-1", [response] * replies)
     return Agent("fastapi-agent", model)
 
 
@@ -74,3 +73,62 @@ def test_invoke_defaults_to_empty_input_when_missing():
 
     assert resp.status_code == 200
     assert resp.json()["text"] == "default response"
+
+
+def test_agent_factory_gives_each_session_id_its_own_conversation_history():
+    created = []
+
+    def factory() -> Agent:
+        agent = _agent_with_response("hi", replies=2)
+        created.append(agent)
+        return agent
+
+    app = create_fastapi_app(factory)
+    client = TestClient(app)
+
+    client.post("/invoke", json={"input": "hello", "session_id": "alice"})
+    client.post("/invoke", json={"input": "hello", "session_id": "bob"})
+    client.post("/invoke", json={"input": "again", "session_id": "alice"})
+
+    assert len(created) == 2  # alice's second call reused her agent, not a new one
+    alice_roles = [m.role for m in created[0].memory.working.messages]
+    bob_roles = [m.role for m in created[1].memory.working.messages]
+    assert alice_roles == ["user", "assistant", "user", "assistant"]
+    assert bob_roles == ["user", "assistant"]
+
+
+def test_agent_factory_without_session_id_reuses_a_single_default_session():
+    created = []
+
+    def factory() -> Agent:
+        agent = _agent_with_response("hi", replies=2)
+        created.append(agent)
+        return agent
+
+    app = create_fastapi_app(factory)
+    client = TestClient(app)
+
+    client.post("/invoke", json={"input": "one"})
+    client.post("/invoke", json={"input": "two"})
+
+    assert len(created) == 1
+
+
+def test_agent_factory_evicts_a_session_idle_past_the_ttl():
+    import time
+
+    created = []
+
+    def factory() -> Agent:
+        agent = _agent_with_response("hi")
+        created.append(agent)
+        return agent
+
+    app = create_fastapi_app(factory, session_ttl_seconds=0.01)
+    client = TestClient(app)
+
+    client.post("/invoke", json={"input": "hello", "session_id": "alice"})
+    time.sleep(0.05)
+    client.post("/invoke", json={"input": "hello again", "session_id": "alice"})
+
+    assert len(created) == 2  # the idle session was evicted, so "alice" got a fresh Agent

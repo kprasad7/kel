@@ -63,6 +63,29 @@ async def test_serve_websocket_handles_multiple_messages_on_one_connection():
     assert second["text"] == "second"
 
 
+async def test_serve_websocket_factory_gives_each_connection_its_own_agent():
+    created = []
+
+    def factory() -> Agent:
+        model = ScriptedStreamModel("fake-1", [[MessageStop(response=_final_response("hi"))]])
+        agent = Agent("ws-agent", model)
+        created.append(agent)
+        return agent
+
+    with serve_websocket(factory, port=0) as server:
+        async with websockets.connect(f"ws://127.0.0.1:{server.port}") as client_a:
+            await client_a.send(json.dumps({"input": "hello"}))
+            await client_a.recv()
+
+        async with websockets.connect(f"ws://127.0.0.1:{server.port}") as client_b:
+            await client_b.send(json.dumps({"input": "hello"}))
+            await client_b.recv()
+
+    assert len(created) == 2  # each connection built its own Agent, not a shared one
+    assert [m.role for m in created[0].memory.working.messages] == ["user", "assistant"]
+    assert [m.role for m in created[1].memory.working.messages] == ["user", "assistant"]
+
+
 def test_serve_websocket_port_property_raises_before_start():
     from kel.sdk.serve_websocket import KelWebSocketServer
 
