@@ -30,13 +30,21 @@ user experience) makes worth solving here rather than leaving to a bare
    fal's own docs recommend the queue (`submit`/poll or webhook) over a
    blocking synchronous call for exactly this reason. `submit()` /
    `asubmit()` expose that path instead of only the blocking `generate()`.
-3. **Surprise bills are a commonly reported complaint** (fal has no fixed
-   per-token pricing table the way chat models do — cost varies per
-   model, resolution, and duration). Pass `budget=` a
-   `kel.budget.BudgetTracker` and `cost_usd=` (a fixed float, or a
-   `Callable[[MediaResult], float]` for endpoints whose response tells you
-   the actual cost/duration) to meter media spend the same way
-   `kel.get_model(budget=...)` meters chat spend.
+3. **Surprise bills are a commonly reported complaint** (fal — and every
+   image/video generation platform, not fal specifically — has no fixed
+   per-token pricing table the way chat models do; cost varies per model,
+   resolution, and duration, and a single video call can be expensive).
+   Pass `budget=` a `kel.budget.BudgetTracker` plus either:
+   - `cost_estimator=` (a `Callable[[dict], float]` estimating cost from
+     the *arguments*, checked and reserved **before** the real network
+     call) — this is the one that actually protects you, since it can
+     refuse to spend money at all once the budget's exhausted, instead of
+     finding out after the (possibly expensive) call already completed.
+   - or `cost_usd=` (a fixed float, or a `Callable[[MediaResult], float]`
+     using the actual response) for a post-hoc running total when you'd
+     rather charge exact cost than an estimate.
+   Passing both is redundant, not double-charged: `cost_estimator`, if
+   given, takes over budget charging entirely for that call.
 """
 
 from __future__ import annotations
@@ -130,37 +138,44 @@ class FalMediaModel:
         client: _FalClient | _AsyncFalClient | None = None,
         budget: Any = None,
         cost_usd: float | Callable[[MediaResult], float] | None = None,
+        cost_estimator: Callable[[dict[str, Any]], float] | None = None,
     ):
         self.endpoint = endpoint
         self._api_key = api_key
         self._client = client
         self._budget = budget
         self._cost_usd = cost_usd
+        self._cost_estimator = cost_estimator
 
     def generate(self, **arguments: Any) -> MediaResult:
+        self._reserve_budget(arguments)
         with get_tracer().span("media.generate", provider="fal", endpoint=self.endpoint):
             try:
                 raw = self._run_sync(arguments)
             except Exception as exc:
                 raise _translate_error(exc) from exc
         result = MediaResult(raw)
-        self._charge_budget(result)
+        if self._cost_estimator is None:
+            self._charge_budget(result)
         return result
 
     async def agenerate(self, **arguments: Any) -> MediaResult:
+        self._reserve_budget(arguments)
         with get_tracer().span("media.generate", provider="fal", endpoint=self.endpoint):
             try:
                 raw = await self._run_async(arguments)
             except Exception as exc:
                 raise _translate_error(exc) from exc
         result = MediaResult(raw)
-        self._charge_budget(result)
+        if self._cost_estimator is None:
+            self._charge_budget(result)
         return result
 
     def submit(self, **arguments: Any) -> FalJobHandle:
         """Submit without waiting — poll `.status()`/`.result()` later.
         The path fal's own docs recommend for anything slow (video)
         instead of blocking on `generate()`."""
+        self._reserve_budget(arguments)
         with get_tracer().span("media.submit", provider="fal", endpoint=self.endpoint):
             try:
                 if self._client is not None:
@@ -172,6 +187,18 @@ class FalMediaModel:
             except Exception as exc:
                 raise _translate_error(exc) from exc
         return FalJobHandle(raw_handle)
+
+    def _reserve_budget(self, arguments: dict[str, Any]) -> None:
+        # Charged *before* the network call, from an estimate over the
+        # request arguments — not exact, but it's the only way to refuse
+        # to spend money at all once a budget's exhausted, rather than
+        # discovering that after an already-expensive call completed.
+        # Same "conservative, not exact" tradeoff kel.ratelimit already
+        # documents for its own up-front token reservation.
+        if self._budget is None or self._cost_estimator is None:
+            return
+        estimated = self._cost_estimator(arguments)
+        self._budget.record_usage(Usage(), cost_usd=estimated)
 
     def _charge_budget(self, result: MediaResult) -> None:
         if self._budget is None:

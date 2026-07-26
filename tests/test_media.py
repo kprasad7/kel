@@ -226,6 +226,72 @@ def test_generate_raises_budget_exceeded_once_the_cap_trips():
         model.generate(prompt="too expensive")
 
 
+def test_cost_estimator_reserves_budget_before_the_call_and_refuses_to_spend():
+    client = FakeFalClient({"video": {"url": "https://fal.example/out.mp4"}})
+    tracker = BudgetTracker(Budget(max_cost_usd=1.0))
+    model = FalMediaModel(
+        "fal-ai/kling-video",
+        client=client,
+        budget=tracker,
+        cost_estimator=lambda arguments: arguments["duration"] * 0.5,
+    )
+
+    with pytest.raises(BudgetExceededError):
+        model.generate(prompt="a very long video", duration=10)   # estimated $5.00 > $1.00 cap
+
+    # the real network call never happened — the reservation raised first
+    assert client.calls == []
+
+
+def test_cost_estimator_lets_a_within_budget_call_through_and_charges_the_estimate():
+    client = FakeFalClient({"video": {"url": "https://fal.example/out.mp4"}})
+    tracker = BudgetTracker(Budget(max_cost_usd=10.0))
+    model = FalMediaModel(
+        "fal-ai/kling-video",
+        client=client,
+        budget=tracker,
+        cost_estimator=lambda arguments: arguments["duration"] * 0.5,
+    )
+
+    model.generate(prompt="a short video", duration=4)
+
+    assert client.calls == [("fal-ai/kling-video", {"prompt": "a short video", "duration": 4})]
+    assert tracker.cost_usd_used == pytest.approx(2.0)
+
+
+def test_cost_estimator_takes_priority_over_cost_usd_not_double_charged():
+    client = FakeFalClient({"video": {"url": "https://fal.example/out.mp4"}})
+    tracker = BudgetTracker(Budget(max_cost_usd=10.0))
+    model = FalMediaModel(
+        "fal-ai/kling-video",
+        client=client,
+        budget=tracker,
+        cost_estimator=lambda arguments: 1.0,
+        cost_usd=100.0,   # would blow the budget if also charged — must not be applied
+    )
+
+    model.generate(prompt="hi")
+
+    assert tracker.cost_usd_used == pytest.approx(1.0)
+
+
+def test_cost_estimator_also_reserves_budget_before_submit():
+    handle = FakeJobHandle({"video": {"url": "https://fal.example/out.mp4"}})
+    client = FakeQueueClient(handle)
+    tracker = BudgetTracker(Budget(max_cost_usd=1.0))
+    model = FalMediaModel(
+        "fal-ai/kling-video",
+        client=client,
+        budget=tracker,
+        cost_estimator=lambda arguments: arguments["duration"] * 0.5,
+    )
+
+    with pytest.raises(BudgetExceededError):
+        model.submit(prompt="a very long video", duration=10)
+
+    assert client.calls == []
+
+
 class FakeJobHandle:
     def __init__(self, response):
         self._response = response

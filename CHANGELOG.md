@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-07-26
+
+### Added
+- `FalMediaModel(..., cost_estimator=)` (`kel.media`): reserves an *estimated* cost against a `BudgetTracker` from the request arguments **before** the real network call, instead of only charging after a (possibly expensive, minutes-long) generation already completed. `cost_usd=`'s post-hoc charging still works unchanged when no `cost_estimator` is given; passing both isn't double-charged — `cost_estimator` takes over entirely for that call. Same "conservative, not exact" tradeoff `kel.ratelimit` already documents for its own up-front token reservation. Closes the gap where a single expensive call could still blow past a budget cap before it was ever charged.
+
 ## [1.7.1] - 2026-07-26
 
 ### Added
@@ -123,7 +128,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.md`-based agent specs, CLI (`run`/`eval`/`trace`), and `serve()` HTTP runtime.
 - DevSecOps pipeline: Trivy, pip-audit, and Bandit scanning; Dependabot.
 
-[Unreleased]: https://github.com/kprasad7/kel/compare/v1.7.1...HEAD
+[Unreleased]: https://github.com/kprasad7/kel/compare/v1.7.2...HEAD
+[1.7.2]: https://github.com/kprasad7/kel/releases/tag/v1.7.2
 [1.7.1]: https://github.com/kprasad7/kel/releases/tag/v1.7.1
 [1.7.0]: https://github.com/kprasad7/kel/releases/tag/v1.7.0
 [1.6.0]: https://github.com/kprasad7/kel/releases/tag/v1.6.0

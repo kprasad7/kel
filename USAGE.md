@@ -1179,6 +1179,28 @@ video_model = get_video_model(
 video_model.generate(prompt="a cat flying")   # raises BudgetExceededError once tracker's max_cost_usd trips
 ```
 
+Both of those charge *after* the call already completed — for anything
+genuinely expensive (a long video render), that only tells you about the
+overspend after the money's spent. `cost_estimator=` reserves an
+estimated cost from the *request arguments*, checked **before** the real
+network call — a call that would blow the budget never actually happens:
+
+```python
+video_model = get_video_model(
+    "fal:fal-ai/kling-video/v1.6/standard/text-to-video",
+    api_key="...",
+    budget=tracker,
+    cost_estimator=lambda arguments: arguments.get("duration", 5) * 0.50,   # rough $/second estimate
+)
+video_model.generate(prompt="a 30-second video", duration=30)   # raises BudgetExceededError immediately — no call made
+```
+
+Same "conservative, not exact" tradeoff `kel.ratelimit` already documents
+for its own up-front token reservation — an estimate, not the vendor's
+exact billed amount. Passing both `cost_estimator=` and `cost_usd=` isn't
+double-charged: `cost_estimator`, if given, takes over budget charging
+entirely for that call.
+
 Not exercised against a live fal.ai API key — implemented against fal's
 documented `fal_client` SDK shape and verified against injected fakes in
 the test suite, same honesty as the other provider adapters' status in
