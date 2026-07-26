@@ -1,9 +1,8 @@
 """`"provider:model_ref"` spec -> media model factory, the same registry
 shape `kel.models.registry` uses for chat models — a small core-maintained
-set (today: `fal`, since fal.ai's one generic endpoint-submission API
-already covers image/video/audio/lipsync) with the registry open for
-another vendor to be added the same way, without kel's core growing an
-ever-longer if/elif chain."""
+set (today: `fal`, `replicate`) with the registry open for another vendor
+to be added the same way, without kel's core growing an ever-longer
+if/elif chain."""
 
 from __future__ import annotations
 
@@ -11,6 +10,7 @@ from collections.abc import Callable
 from typing import Any
 
 from kel.media.fal import FalMediaModel
+from kel.media.replicate import ReplicateMediaModel
 
 _MediaModelFactory = Callable[..., Any]
 
@@ -27,7 +27,12 @@ def _register_builtin_fal(model_ref: str, **kwargs: Any) -> FalMediaModel:
     return FalMediaModel(model_ref, **kwargs)
 
 
+def _register_builtin_replicate(model_ref: str, **kwargs: Any) -> ReplicateMediaModel:
+    return ReplicateMediaModel(model_ref, **kwargs)
+
+
 register_media_provider("fal", _register_builtin_fal)
+register_media_provider("replicate", _register_builtin_replicate)
 
 
 def _get_media_model(spec: str, **kwargs: Any) -> Any:
@@ -41,16 +46,18 @@ def _get_media_model(spec: str, **kwargs: Any) -> Any:
 
 
 def get_image_model(spec: str, *, api_key: str | None = None, client: Any = None, **kwargs: Any) -> Any:
-    """Example: `get_image_model("fal:fal-ai/flux/schnell")`. Image
+    """Example: `get_image_model("fal:fal-ai/flux/schnell")` or
+    `get_image_model("replicate:black-forest-labs/flux-schnell")`. Image
     "scale" (resolution/aspect ratio) is just an argument the specific
     endpoint defines — pass it to `.generate(**arguments)`, not here.
     Extra `**kwargs` (e.g. `budget=`/`cost_usd=`) are forwarded to the
-    resolved provider's constructor — see `FalMediaModel` for fal's."""
+    resolved provider's constructor — see `FalMediaModel`/`ReplicateMediaModel`."""
     return _get_media_model(spec, api_key=api_key, client=client, **kwargs)
 
 
 def get_video_model(spec: str, *, api_key: str | None = None, client: Any = None, **kwargs: Any) -> Any:
-    """Example: `get_video_model("fal:fal-ai/kling-video/v1.6/standard/text-to-video")`."""
+    """Example: `get_video_model("fal:fal-ai/kling-video/v1.6/standard/text-to-video")`
+    or `get_video_model("replicate:minimax/video-01")`."""
     return _get_media_model(spec, api_key=api_key, client=client, **kwargs)
 
 

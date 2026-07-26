@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-07-26
+
+### Added
+- `kel.media.ReplicateMediaModel` (`pip install "pykel[replicate]"`): a second built-in media provider alongside fal.ai, proving the `kel.media` gateway abstraction generalizes across vendors rather than being fal-specific. Same `generate()`/`agenerate()`/`submit()`/`FalJobHandle`-equivalent (`ReplicateJobHandle`) shape, same error translation, same `budget=`/`cost_usd=`/`cost_estimator=` cost governance — different SDK underneath (`replicate.run(model, input=...)`). Resolvable via `get_image_model("replicate:...")`/`get_video_model("replicate:...")`/etc., same as fal. Replicate's varying output shape (a URL, a list of them, or a structured dict depending on the model) is normalized into the same shape `MediaResult`'s URL extraction already understands.
+- `kel.media.errors` (internal): the HTTP-status-based error translation `FalMediaModel` had was extracted into a small shared helper (`translate_error`) so `ReplicateMediaModel` — and any future `kel.media` provider — doesn't duplicate it. No behavior change for existing fal.ai usage.
+
 ## [1.7.2] - 2026-07-26
 
 ### Added
@@ -128,7 +134,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.md`-based agent specs, CLI (`run`/`eval`/`trace`), and `serve()` HTTP runtime.
 - DevSecOps pipeline: Trivy, pip-audit, and Bandit scanning; Dependabot.
 
-[Unreleased]: https://github.com/kprasad7/kel/compare/v1.7.2...HEAD
+[Unreleased]: https://github.com/kprasad7/kel/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/kprasad7/kel/releases/tag/v1.8.0
 [1.7.2]: https://github.com/kprasad7/kel/releases/tag/v1.7.2
 [1.7.1]: https://github.com/kprasad7/kel/releases/tag/v1.7.1
 [1.7.0]: https://github.com/kprasad7/kel/releases/tag/v1.7.0

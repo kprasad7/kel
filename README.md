@@ -53,7 +53,7 @@ If you're evaluating **AI agent frameworks**, **production-ready agent orchestra
 - **Brain** — fast rule/embedding routing with LLM fallback, parallel-to-finish scheduling
 - **Self-Healing** — diagnosis-driven retries with a non-negotiable idempotency guardrail
 - **Built-in Tools** — web search (7 providers), URL fetch, Python/shell exec, SQL query, MCP servers
-- **Media Generation** — image, video, text-to-speech, and lipsync via a generic fal.ai gateway, open for other vendors
+- **Media Generation** — image, video, text-to-speech, and lipsync via a generic gateway (fal.ai, Replicate), open for other vendors
 - **Testing** — record/replay + LLM-graded evaluation, no live API key needed in CI
 - **Live Monitoring Dashboard** — zero-dependency, real-time metrics + logs in your browser
 - **Production Deploy Adapters** — stdlib HTTP, real WebSocket, and FastAPI (with per-session Agent isolation) — see USAGE.md §14
@@ -72,6 +72,7 @@ pip install "pykel[mistral]"    # + Mistral
 pip install "pykel[qdrant]"     # + Qdrant vector store
 pip install "pykel[fastapi]"    # + FastAPI production adapter
 pip install "pykel[fal]"        # + fal.ai image/video/audio/lipsync generation
+pip install "pykel[replicate]"  # + Replicate image/video/audio generation
 pip install "pykel[all]"        # everything
 ```
 

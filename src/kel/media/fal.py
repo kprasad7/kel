@@ -52,8 +52,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, Protocol
 
+from kel.media.errors import translate_error
 from kel.media.types import MediaResult
-from kel.models.errors import AuthenticationError, ProviderError, RateLimitError
 from kel.models.types import Usage
 from kel.observability import get_tracer
 
@@ -75,24 +75,6 @@ def _import_fal_client() -> Any:
             "Install it with `pip install kel[fal]`."
         ) from exc
     return fal_client
-
-
-def _status_code_of(exc: Exception) -> int | None:
-    status = getattr(exc, "status_code", None)
-    if isinstance(status, int):
-        return status
-    response = getattr(exc, "response", None)
-    status = getattr(response, "status_code", None)
-    return status if isinstance(status, int) else None
-
-
-def _translate_error(exc: Exception, *, provider: str = "fal") -> ProviderError:
-    status = _status_code_of(exc)
-    if status in (401, 403):
-        return AuthenticationError(str(exc), provider=provider)
-    if status == 429:
-        return RateLimitError(str(exc), provider=provider)
-    return ProviderError(str(exc), provider=provider, retryable=status in (500, 502, 503, 504) if status else False)
 
 
 class FalJobHandle:
@@ -117,7 +99,7 @@ class FalJobHandle:
         try:
             raw = getattr(self._raw, self._result_method)()
         except Exception as exc:
-            raise _translate_error(exc) from exc
+            raise translate_error(exc, provider="fal") from exc
         return MediaResult(raw)
 
     def cancel(self) -> None:
@@ -153,7 +135,7 @@ class FalMediaModel:
             try:
                 raw = self._run_sync(arguments)
             except Exception as exc:
-                raise _translate_error(exc) from exc
+                raise translate_error(exc, provider="fal") from exc
         result = MediaResult(raw)
         if self._cost_estimator is None:
             self._charge_budget(result)
@@ -165,7 +147,7 @@ class FalMediaModel:
             try:
                 raw = await self._run_async(arguments)
             except Exception as exc:
-                raise _translate_error(exc) from exc
+                raise translate_error(exc, provider="fal") from exc
         result = MediaResult(raw)
         if self._cost_estimator is None:
             self._charge_budget(result)
@@ -185,7 +167,7 @@ class FalMediaModel:
                     submitter = fal_client.SyncClient(key=self._api_key) if self._api_key else fal_client
                     raw_handle = submitter.submit(self.endpoint, arguments=arguments)
             except Exception as exc:
-                raise _translate_error(exc) from exc
+                raise translate_error(exc, provider="fal") from exc
         return FalJobHandle(raw_handle)
 
     def _reserve_budget(self, arguments: dict[str, Any]) -> None:

@@ -1009,17 +1009,25 @@ class MyTTS:                                     # satisfies TTSProvider structu
 
 ---
 
-## 16. Media generation — image / video / audio / lipsync (`kel.media`, `pip install "pykel[fal]"`)
+## 16. Media generation — image / video / audio / lipsync (`kel.media`, `pip install "pykel[fal]"` / `"pykel[replicate]"`)
 
 A generic gateway for third-party generative-media APIs, following the
-same `"provider:model"` spec pattern as `kel.get_model`. Today's one
-built-in provider is **fal.ai**, chosen because its platform already
-covers every media type (image, video, text-to-speech, lipsync) through
-one consistent request shape — submit `arguments` to a named model
-endpoint, get a result back — so a single generic `FalMediaModel` class
-handles all of them instead of kel shipping one bespoke wrapper class per
-media type. The registry is open (`register_media_provider`) for another
-vendor to be added the same way later.
+same `"provider:model"` spec pattern as `kel.get_model`. Two built-in
+providers today:
+
+- **fal.ai** (`FalMediaModel`) — one platform covering every media type
+  (image, video, text-to-speech, lipsync) through one consistent request
+  shape, so a single generic class handles all of them.
+- **Replicate** (`ReplicateMediaModel`) — a second, independent vendor
+  proving the abstraction isn't fal-specific: same
+  `generate()`/`agenerate()`/`submit()` shape, same error translation,
+  same budget hooks, different SDK underneath (`replicate.run(model,
+  input=...)` instead of `fal_client.run(endpoint, arguments=...)`).
+  `"owner/model"` resolves to that model's latest version automatically;
+  pin `"owner/model:version"` for reproducibility.
+
+The registry is open (`register_media_provider`) for another vendor to be
+added the same way — Runway, Stability, ElevenLabs direct, or your own.
 
 **Image generation** — "scale" (resolution, aspect ratio) is just an
 argument the specific endpoint defines, not something kel hardcodes:
@@ -1201,10 +1209,33 @@ exact billed amount. Passing both `cost_estimator=` and `cost_usd=` isn't
 double-charged: `cost_estimator`, if given, takes over budget charging
 entirely for that call.
 
-Not exercised against a live fal.ai API key — implemented against fal's
-documented `fal_client` SDK shape and verified against injected fakes in
-the test suite, same honesty as the other provider adapters' status in
-the Known Gaps section at the bottom of this file.
+**Replicate** — the same generate/submit/budget shape, on a different
+vendor SDK. Everything above (error translation, `submit()`,
+`budget=`/`cost_usd=`/`cost_estimator=`) works identically:
+
+```python
+from kel.media import get_image_model, get_video_model
+
+image_model = get_image_model("replicate:black-forest-labs/flux-schnell", api_key="...")
+result = image_model.generate(prompt="a lighthouse at sunset")
+result.urls   # Replicate's output shape varies by model (a URL, a list of
+              # them, or a structured dict) — normalized into the same
+              # {"url": ...} shape kel.media.MediaResult already extracts
+
+video_model = get_video_model("replicate:minimax/video-01", api_key="...")
+job = video_model.submit(prompt="a drone shot flying over mountains")
+job.status()
+result = job.result()
+```
+
+Not exercised against a live API key for either provider — implemented
+against each vendor's documented SDK shape and verified against injected
+fakes in the test suite, same honesty as the other provider adapters'
+status in the Known Gaps section at the bottom of this file. Replicate's
+`submit()` (the `predictions.create()` queue path specifically) is the
+less-confidently-verified surface of the two — `generate()`/`agenerate()`
+(the plain `run()`/`async_run()` path) are the better-known, lower-risk
+choice if you don't need queue/poll behavior.
 
 ---
 
@@ -1490,7 +1521,7 @@ adapter's constructor signature directly — not just documented, enforced:
 - Cache keys (`kel.caching`) cover `generate()`'s named parameters only, not arbitrary provider-specific `**kwargs`.
 - Rate limiting reserves an *estimated* token cost up front and doesn't refund the difference against actual usage — conservative, not exact.
 - Pinecone has no built-in keyword/full-text search on the base vector index — `PineconeVectorStore.keyword_query` returns an empty list.
-- `kel.media` ships one provider (fal.ai) — real image/video/audio/lipsync generation is only as broad as whatever's hosted on fal's platform; another vendor needs `register_media_provider`.
-- Nothing here has been exercised against a live API key or a real OTLP/vector-DB/database server except the Cohere path used in the separate `cohere-agent` demo project — everything else (including all 5 vector store adapters, Gemini, Mistral, and `kel.media`'s fal.ai adapter) is tested against fakes/mocks in the test suite.
+- `kel.media` ships two providers (fal.ai, Replicate) — real image/video/audio/lipsync generation breadth is whatever's hosted on those two platforms; another vendor (Runway, Stability, ElevenLabs direct) needs `register_media_provider`.
+- Nothing here has been exercised against a live API key or a real OTLP/vector-DB/database server except the Cohere path used in the separate `cohere-agent` demo project — everything else (including all 5 vector store adapters, Gemini, Mistral, and `kel.media`'s fal.ai/Replicate adapters) is tested against fakes/mocks in the test suite.
 
 
